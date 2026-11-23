@@ -9,6 +9,7 @@ Each playground is a guided *quest*: a story-flavoured path of bite-sized missio
 | | Playground | You will learn | Folder |
 |---|---|---|---|
 | 📜 | **Script Quest** | JavaScript, TypeScript and Node, in a real console | [`programming/script-quest/`](programming/script-quest/) |
+| 🟦 | **TypeScript Quest** | Types and inference, unions and narrowing, aliases and interfaces, typed functions, arrays and tuples, generics, classes and access modifiers, literal types and enums, utility types, modules across several files, then the advanced tier: `keyof` and indexed access, mapped types, conditional types and template literal types, then the Node tier: `tsconfig` and strict mode, typing `fs` and `http`, testing with `node:test` and a final typed command-line tool, all in a virtual terminal and checked by the real TypeScript compiler | [`programming/typescript-quest/`](programming/typescript-quest/) |
 | 🐍 | **Python Quest** | Python, with a memory map and step-by-step replay | [`programming/python-quest/`](programming/python-quest/) |
 | ⚙️ | **C++ Quest** | From Hello, World to pointers, with memory boxes | [`programming/cpp-quest/`](programming/cpp-quest/) |
 | 🐚 | **Shell Quest** | Bash: files, pipes, scripts, `awk`, `sed`, jobs. A pretend computer, so nothing you type can hurt | [`programming/shell-quest/`](programming/shell-quest/) |
@@ -111,10 +112,12 @@ The Math section vendors four libraries under `math/vendor/`; `tools/vendor-math
 
 ```
 index.html              landing page (a card per section)
-shared/                 code every playground reuses: progress saving, tier model, mission "How it works" steps, the Settings panel with Theme and Story (settings.js, settings.css), "The trail" strip (trail.js, trail.css), landing.css + cards.js (landing and hub cards), catalog.js (every playground's key and chapter counts), trophies.js (level and achievements)
+shared/                 code every playground reuses: progress saving, tier model, mission "How it works" steps, the Settings panel with Theme and Story (settings.js, settings.css), "The trail" strip (trail.js, trail.css), landing.css + cards.js (landing and hub cards), catalog.js (every playground's key and chapter counts), trophies.js (level and achievements), jsrealm.js + scheduler.js + nodeenv.js + nodetest.js + nodetypes.js + terminal.js + tscheck.js (Script Quest's JS realm, virtual event loop, virtual Node with `node:test` and `assert`, typings for Node, the terminal interpreter both quests share, and TypeScript checker)
 programming/            the Programming section: index.html (hub with a card per quest) and one folder per quest
-  script-quest/ python-quest/ cpp-quest/
+  python-quest/ cpp-quest/
                         index.html + style.css + app.js each
+  script-quest/         like those, plus content/ (chapters, quick-fire, guide) and tiers.js (tier setup); the realm, Node and TS checker live in shared/
+  typescript-quest/     the same shape as script-quest/, on the shared engine and tier model; tests in tests/typescript/
   harbor-quest/         like those, plus engine/ (DOM-free Docker, Kubernetes and shell simulator), content/ (tiers, chapters, quick-fire, guide), ui.js
   ds-quest/             like those, plus engine.js (runner), content.js (course), demos.js (guide explainers)
   net-quest/            like those, plus engine/ (DOM-free simulator, shell, commands), content/ (mission model, seven chapters, ranks, quick-fire, guide), ui.js + inspector.js
@@ -144,7 +147,7 @@ Shell Quest is plain scripts sharing one `SQ` namespace, loaded in order from `i
 
 ### Tests, in one breath
 
-`tests/shell/*.test.mjs` run the engine and content in Node, including **a solvability test for every mission** (each mission's reference `answer` must pass its own `check`) and two differential corpora that compare thousands of recorded outputs. `tests/shell-golden.mjs` replays every Beginner mission in a real browser against recorded fixtures. `tests/smoke.mjs` loads every playground, exercises progress export/import and the Shell Quest UI, and plays the whole course through. Harbor Quest has its own engine and content files, tested in `tests/harbor/` (solvability, teaching and tier tests). Script, Python and C++ Quest keep their course inside `app.js`; `tests/content-loader.mjs` slices it out for their tests, which include solvability tests (Python and C++ in Node, Script in `tests/smoke.mjs` because its checks need a real browser realm). `tests/tools/publish_site.test.mjs` checks that a preview whose push loses a race with another is rebased and published. **Never regenerate golden or corpus fixtures to make a test pass**; the [guideline](docs/tiers-guideline.md) explains why and what to do instead.
+`tests/shell/*.test.mjs` run the engine and content in Node, including **a solvability test for every mission** (each mission's reference `answer` must pass its own `check`) and two differential corpora that compare thousands of recorded outputs. `tests/shell-golden.mjs` replays every Beginner mission in a real browser against recorded fixtures. `tests/smoke.mjs` loads every playground, exercises progress export/import and the Shell Quest UI, and plays the whole course through. Harbor Quest has its own engine and content files, tested in `tests/harbor/` (solvability, teaching and tier tests). Script Quest's course lives in `programming/script-quest/content/`, and its Node tests load it with `loadScriptContent`; TypeScript Quest's tests (`tests/typescript/`) load theirs with `loadTypescriptContent` and compile every mission answer with the pinned `typescript` devDependency; Python and C++ Quest keep theirs inside `app.js`, and `loadContent` in `tests/content-loader.mjs` slices it out. Their tests include solvability tests (Python and C++ in Node, Script in `tests/smoke.mjs` because its checks need a real browser realm). `tests/tools/publish_site.test.mjs` checks that a preview whose push loses a race with another is rebased and published. **Never regenerate golden or corpus fixtures to make a test pass**; the [guideline](docs/tiers-guideline.md) explains why and what to do instead.
 
 ### Publishing to claude.ai artifacts
 

@@ -1,14 +1,13 @@
 // Script Quest, "teach before use" (AGENTS.md rule 12): a key word must not appear in any mission text before the mission that
 // teaches it (or defines it in place), and Quick-fire only offers questions whose chapter the learner has finished.
-// The course lives in script-quest/app.js next to the DOM app, so load its DOM-free parts (CH, FIRE, qfOpen, the guide data) by slicing.
+// The course lives in script-quest/content/*.js (DOM-free), loaded in the order index.html lists them.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readApp, cut, loadContent } from '../content-loader.mjs';
+import { loadScriptContent } from '../content-loader.mjs';
 
-const tagOf = 'const tagOf=v=>Object.prototype.toString.call(v).slice(8,-1);\n';
-const { CH, FIRE, qfOpen } = loadContent('script-quest', { prelude: tagOf, parts: [['const isArr=', '// ================= UI =================']], returns: ['CH', 'FIRE', 'qfOpen'], mustInclude: ['const qfOpen='] });
-const { BLOCKS, ERRS } = loadContent('script-quest', { parts: [['const BLOCKS=[', 'function renderGuide']], returns: ['BLOCKS', 'ERRS'] });
-const guideSrc = cut(readApp('script-quest'), 'function renderGuide', 'const guideRealms');
+const SCQ = loadScriptContent();
+const { CH, FIRE, qfOpen, BLOCKS, ERRS } = SCQ;
+const guideSrc = String(SCQ.guideHTML);
 
 // term -> [regex that uses it, chapter, mission that first teaches or defines it in place (its own card may use it)]; null = never taught, so never used
 const FIRST = {
@@ -46,6 +45,65 @@ const FIRST = {
   cat:             [/\bcat\b/, 11, 5],
   package:         [/\bpackages?\b(?!\.json)/i, 11, 7],
   'package.json':  [/package\.json/, 11, 9],
+  shadow:          [/\bshadow(s|ed|ing)?\b/i, 12, 1],
+  closure:         [/\bclosures?\b/i, 12, 2],
+  'rest syntax':   [/\.\.\.rest\b|\brest (syntax|operator|parameter|element|property)/i, 13, 4],
+  class:           [/\bclass(es)?\b/i, 14, 0],
+  constructor:     [/\bconstructor\b/i, 14, 0],
+  instance:        [/\binstances?\b/i, 14, 0],
+  extends:         [/\bextends\b/i, 14, 2],
+  super:           [/\bsuper\b/i, 14, 2],
+  inherit:         [/\binherit/i, 14, 2],
+  getter:          [/\bgetters?\b/i, 14, 3],
+  static:          [/\bstatic\b/i, 14, 4],
+  'private field': [/#code\b|\bprivate field/i, 14, 5],
+  finally:         [/\bfinally\b/i, 15, 0],
+  RangeError:      [/RangeError/, 15, 2],
+  rethrow:         [/\brethrow/i, 15, 3],
+  instanceof:      [/\binstanceof\b/, 15, 3],
+  CommonJS:        [/CommonJS/, 16, 0],
+  cache:           [/\bcache\b/i, 16, 3],
+  MODULE_NOT_FOUND:[/MODULE_NOT_FOUND/, 16, 5],
+  ESM:             [/\bESM\b|\bES modules?\b/, 16, 6],
+  Set:             [/\bnew Set\b|\bSets?\b(?! up)/, 17, 0],
+  Map:             [/\bnew Map\b|\bMaps?\b/, 17, 0],
+  stringify:       [/stringify/, 18, 0],
+  reviver:         [/\brevivers?\b/i, 18, 5],
+  microtask:       [/microtask/i, 19, 0],
+  queueMicrotask:  [/queueMicrotask/, 19, 1],
+  nextTick:        [/nextTick/, 19, 2],
+  setImmediate:    [/setImmediate/, 19, 3],
+  'readFile callback': [/\breadFile\b/, 19, 3],
+  'poll phase':    [/\bpoll\b/i, 19, 3],
+  'check phase':   [/\bcheck phase\b/i, 19, 3],
+  'timers phase':  [/\btimers phase\b/i, 19, 3],
+  setInterval:     [/setInterval/, 19, 5],
+  clearInterval:   [/clearInterval/, 19, 5],
+  'Date.now':      [/Date\.now/, 19, 5],
+  'path.join':     [/path\.join/, 20, 0],
+  basename:        [/\bbasename\b/, 20, 0],
+  extname:         [/\bextname\b/, 20, 0],
+  mkdir:           [/\bmkdir\b/, 20, 1],
+  'mkdir -p':      [/mkdir -p/, 20, 1],
+  writeFile:       [/\bwriteFile\b/, 20, 2],
+  appendFile:      [/\bappendFile\b/, 20, 3],
+  readdir:         [/\breaddir\b/, 20, 4],
+  stat:            [/\bstat\b/, 20, 4],
+  unlink:          [/\bunlink\b/, 20, 5],
+  EventEmitter:    [/\bEventEmitter\b/, 21, 0],
+  emit:            [/\bemit\b/, 21, 0],
+  once:            [/\.once\(|\bonce\b.*\blistener/i, 21, 2],
+  listenerCount:   [/listenerCount/, 21, 2],
+  off:             [/\.off\(/, 21, 3],
+  'error event':   [/\.on\("error"|emit\("error"/, 21, 5],
+  'process.on':    [/process\.on\(/, 21, 6],
+  createServer:    [/createServer/, 22, 0],
+  listen:          [/\.listen\(/, 22, 0],
+  curl:            [/\bcurl\b/, 22, 0],
+  writeHead:       [/writeHead/, 22, 1],
+  'req.url':       [/req\.url/, 22, 2],
+  'res.end':       [/res\.end/, 22, 0],
+  '--parallel':    [/--parallel/, 22, 4],
   parseInt:        [/parseInt/, null],
   'Array.isArray': [/Array\.isArray/, null],
   statement:       [/\bstatements?\b/i, null],
@@ -76,6 +134,17 @@ const SYNTAX = {
   'quotes in node -e':   [/^node\s+-e\s+["']/m, /one piece/],
   'single in double':    [/\w\('/, /single quotes/],
   'require without .js': [/require\(\s*["']\.\/[\w-]+["']\s*\)/, /adds \.js/],
+  'class block':         [/\bclass\s+\w+/, /blueprint/],
+  'rest in a pattern':   [/\{[^}]*\.\.\.\w+\s*\}\s*=/, /gathers/],
+  'getter':              [/\bget\s+\w+\s*\(/, /read like a property/],
+  'static method':       [/\bstatic\s+\w+/, /called on the class/],
+  '#private field':      [/#\w+\s*=/, /exists only inside the class/],
+  'finally block':       [/\bfinally\s*\{/, /whatever happens/],
+  'throw':               [/\bthrow\s+(new|err)/, /stops the function right there/],
+  'instanceof':          [/\binstanceof\b/, /it answers true or false/],
+  'error cause':         [/\bcause\s*:/, /as cause/],
+  'Promise.reject':      [/Promise\.reject/, /already failed/],
+  'Promise.resolve':     [/Promise\.resolve/, /already finished/],
 };
 for (const [name, [use, say]] of Object.entries(SYNTAX)) {
   test(`syntax "${name}" is explained by the first mission that uses it`, () => {
@@ -122,6 +191,13 @@ test('terms are defined in place the first time they appear', () => {
   assert.match(m(11, 4).explain, /a <b>module<\/b> is a bundle of ready-made tools/);
   assert.match(m(11, 5).explain, /<code>cat<\/code> is a terminal command/);
   assert.match(m(11, 9).explain, /<b>JSON<\/b>, a plain-text data format/);
+  assert.match(m(12, 1).explain, /<b>shadows<\/b>/);
+  assert.match(m(12, 2).explain, /called a <b>closure<\/b>/);
+  assert.match(m(13, 4).explain, /<b>rest syntax<\/b>/);
+  assert.match(CH[14].intro, /Each stamped object is called an instance/);
+  assert.match(m(14, 2).explain, /<b>extends<\/b>[^]*<b>inherits<\/b>/);
+  assert.match(m(14, 3).explain, /<b>getter<\/b> is a method/);
+  assert.match(m(14, 4).explain, /<b>static<\/b> method/);
 });
 
 test('guide: no string method the quest never taught, NaN and Array.isArray are glossed, the lede does not over-claim', () => {
@@ -139,6 +215,20 @@ test('quick-fire: every question has a chapter, 4 distinct options and a valid r
     assert.equal(q.o.length, 4, q.c);
     assert.equal(new Set(q.o).size, 4, `${q.c}: duplicate options`);
     assert.ok(q.a >= 0 && q.a < 4, q.c);
+  }
+});
+
+test('quick-fire: chapters 21 to 23 have at least 3 questions each', () => {
+  for (const ci of [20, 21, 22]) assert.ok(FIRE.filter(q => q.ch === ci).length >= 3, `chapter ${ci + 1}: ${FIRE.filter(q => q.ch === ci).length}`);
+});
+
+test('quick-fire: chapter 20 has at least 4 questions, and an immediate against a timer only inside a readFile callback', () => {
+  const mine = FIRE.filter(q => q.ch === 19);
+  assert.ok(mine.length >= 4, `only ${mine.length}`);
+  for (const q of FIRE) {
+    if (!/setTimeout/.test(q.c) || !/setImmediate/.test(q.c)) continue;
+    const calls = SCQ.evScan(q.c).calls.filter(x => x.name === 'setTimeout' || x.name === 'setImmediate');
+    assert.ok(calls.length > 0 && calls.every(x => x.parent === 'readFile'), `quick-fire "${q.c.slice(0, 40)}" races a timer and an immediate outside a readFile callback`);
   }
 });
 
