@@ -2914,8 +2914,1139 @@ test('ds-quest field guide: each explainer runs its operations and examples draw
     assert.ok((await page.textContent(`#demo-${id} .democode`)).trim().length > 0, `${id} shows the code`);
   }
   await page.click('.tabs button[data-tab="quest"]');
-  await page.click('[data-act="watch"]');
+  await page.click('.tabs button[data-tab="guide"]');
   await until(async () => !(await page.isHidden('#tab-guide')));
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+const DS_PILOTS = [{ id: '1.0', ch: 1, mi: 0, kind: 'operate' }, { id: '0.3', ch: 0, mi: 3, kind: 'predict' }];
+const DS_CH0_DONE = { '0.0': true, '0.1': true, '0.2': true, '0.3': true, '0.4': true };
+const dsPage = (opts, seed) => open(`${base}/programming/ds-quest/`, { viewport: { width: 1280, height: 900 }, ...opts },
+  ctx => ctx.addInitScript(s => { if (!localStorage.getItem('ds-quest-v1')) localStorage.setItem('ds-quest-v1', JSON.stringify(s)); }, seed));
+const dsIdle = page => until(async () => !(await page.$('#stage button:disabled')));
+const dsSaved = page => page.evaluate(() => JSON.parse(localStorage.getItem('ds-quest-v1') || '{}'));
+const dsFocus = page => page.evaluate(() => {
+  const e = document.activeElement, d = e.dataset;
+  return d.head !== undefined ? 'head' : d.i !== undefined && e.closest('#vbox') ? 'i' + d.i : d.l !== undefined ? 'l' + d.l : d.b !== undefined ? 'b' + d.b : e.tagName;
+});
+const dsCentre = async (page, sel) => { const r = await page.locator(sel).boundingBox(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; };
+// Adds a fixture mission to chapter 1 after load, then opens it as a learner would (the chapter button lands on the first undone mission).
+async function dsInjectOpen(page, m) {
+  await page.evaluate(m => { DSQ.CH[0].missions.push({ ...m, check: () => true }); }, m);
+  await page.click('.chap[data-ch="0"]');
+}
+const DS_FIXTURE = {
+  title: 'Join the nodes', goal: 'Join a, then b.', explain: 'Fixture.', starter: '', answer: '',
+  visual: {
+    kind: 'operate', scene: 'chain', start: { chain: [], loose: ['a', 'b', 'c'] }, link: true, task: 'Join <code>a</code>, then <code>b</code> onto the chain.',
+    buttons: [{ label: 'remove first', op: 'removeFirst' }], goal: { snapshot: { chain: ['a', 'b'], loose: ['c'] } },
+    ref: [{ op: 'link', arg: { from: { head: true }, to: { l: 0 } } }, { op: 'link', arg: { from: { i: 0 }, to: { l: 0 } } }],
+    wrong: [{ op: 'link', arg: { from: { head: true }, to: { l: 1 } } }], lazy: [{ op: 'link', arg: { from: { head: true }, to: { l: 2 } } }],
+  },
+};
+const dsBrokenMission = { ...DS_FIXTURE, title: 'Broken picture', visual: { kind: 'predict', scene: 'row', start: [1, 2], task: 'Walk.', steps: [], pauses: [] } };
+
+test('ds-quest mission page: step 1 shows the trail and a centred stage over left-aligned controls, with step 2 locked', async () => {
+  for (const pilot of DS_PILOTS) {
+    for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 800 }]) {
+      for (const colorScheme of ['light', 'dark']) {
+        const where = `${pilot.id} at ${viewport.width}px, ${colorScheme}`;
+        const { ctx, page, errors } = await dsPage({ viewport, colorScheme }, { ch: pilot.ch, mi: pilot.mi });
+        await page.locator('#vbox .sc').waitFor();
+        assert.equal(await page.evaluate(() => document.querySelector('#mission').firstElementChild.className), 'trail', `${where}: the trail strip comes first`);
+        assert.ok(await page.locator('#mission .trail').isVisible(), where);
+        assert.equal(await trailText(page), plainText(await page.evaluate(c => DSQ.CH[c].story, pilot.ch)), where);
+        assert.equal(await page.locator('[data-act="fill"], [data-act="watch"]').count(), 0, `${where}: no Type it for me or Watch it work`);
+        assert.equal(await page.locator('[data-step="2"][aria-disabled="true"]').count(), 1, `${where}: step 2 is locked`);
+        assert.ok(await page.locator('#code').isHidden(), `${where}: the editor stays hidden until step 1 passes`);
+        const g = await page.evaluate(() => {
+          const r = s => document.querySelector(s).getBoundingClientRect(), box = document.querySelector('#vbox');
+          const b = r('#vbox'), sc = r('#vbox .sc'), btn = r('#vbar button'), panel = r('#stage');
+          return { fits: box.scrollWidth <= box.clientWidth, off: Math.abs(b.left + b.width / 2 - (sc.left + sc.width / 2)), scLeft: sc.left - b.left,
+            above: sc.bottom <= btn.top, btnLeft: btn.left - panel.left, align: getComputedStyle(document.querySelector('#vsay')).textAlign };
+        });
+        assert.ok(g.fits ? g.off < 3 : g.scLeft >= -1, `${where}: the stage is centred, or scrolls without losing its left edge (${JSON.stringify(g)})`);
+        assert.ok(g.above, `${where}: the stage sits above the controls`);
+        assert.ok(g.btnLeft < 30, `${where}: the controls start at the left (${g.btnLeft}px)`);
+        assert.ok(['start', 'left'].includes(g.align), `${where}: the sentence is left-aligned`);
+        assert.equal(await overflow(page), false, where);
+        assert.deepEqual(errors, [], where);
+        await ctx.close();
+      }
+    }
+  }
+});
+
+const DS_SCENES = [{ id: '3.0', ch: 3, mi: 0, cls: 'sc-chain' }, { id: '4.0', ch: 4, mi: 0, cls: 'sc-buckets' },
+  { id: '5.2', ch: 5, mi: 2, cls: 'sc-tree' }, { id: '5.3', ch: 5, mi: 3, cls: 'sc-tree' },
+  { id: '2.0', ch: 2, mi: 0, cls: 'sc-line' }, { id: '2.2', ch: 2, mi: 2, cls: 'sc-line' }, { id: '4.1', ch: 4, mi: 1, cls: 'sc-set' }];
+
+test('ds-quest mission page: the queue line, chain, buckets and tree scenes fit at 1280 and 390 px, with step 2 locked', async () => {
+  for (const scene of DS_SCENES) {
+    for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 800 }]) {
+      for (const colorScheme of ['light', 'dark']) {
+        const where = `${scene.id} at ${viewport.width}px, ${colorScheme}`;
+        const { ctx, page, errors } = await dsPage({ viewport, colorScheme }, { ch: scene.ch, mi: scene.mi });
+        await page.locator('#vbox .sc').waitFor();
+        assert.equal(await page.locator(`#vbox .sc.${scene.cls}`).count(), 1, `${where}: draws the ${scene.cls} scene`);
+        assert.equal(await page.evaluate(() => document.querySelector('#mission').firstElementChild.className), 'trail', `${where}: the trail strip comes first`);
+        assert.equal(await page.locator('[data-step="2"][aria-disabled="true"]').count(), 1, `${where}: step 2 is locked`);
+        const g = await page.evaluate(() => {
+          const r = s => document.querySelector(s).getBoundingClientRect(), box = document.querySelector('#vbox');
+          const b = r('#vbox'), sc = r('#vbox .sc'), btn = r('#vbar button'), panel = r('#stage');
+          return { fits: box.scrollWidth <= box.clientWidth, off: Math.abs(b.left + b.width / 2 - (sc.left + sc.width / 2)), scLeft: sc.left - b.left,
+            above: sc.bottom <= btn.top, btnLeft: btn.left - panel.left, align: getComputedStyle(document.querySelector('#vsay')).textAlign };
+        });
+        assert.ok(g.fits ? g.off < 3 : g.scLeft >= -1, `${where}: the stage is centred, or scrolls without losing its left edge (${JSON.stringify(g)})`);
+        assert.ok(g.above, `${where}: the stage sits above the controls`);
+        assert.ok(g.btnLeft < 30, `${where}: the controls start at the left (${g.btnLeft}px)`);
+        assert.ok(['start', 'left'].includes(g.align), `${where}: the sentence is left-aligned`);
+        assert.equal(await overflow(page), false, where);
+        assert.deepEqual(errors, [], where);
+        await ctx.close();
+      }
+    }
+  }
+});
+
+test('ds-quest mission page: finishing step 1 in 1.0 shows refusals, opens the editor, saves seen and runs the practice step', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 1, mi: 0 });
+  await page.locator('#vbox .sc').waitFor();
+  await page.click('#vbar [data-b="3"]');
+  await dsIdle(page);
+  assert.ok((await page.textContent('#vsay')).trim().length >= 10, 'popping an empty pile says why');
+  assert.match(await page.textContent('#vmoves'), /Moves 0 · fewest 3/);
+  for (const b of [0, 1, 2]) { await page.click(`#vbar [data-b="${b}"]`); await dsIdle(page); }
+  assert.match(await page.textContent('#vmoves'), /Moves 3 · fewest 3/);
+  assert.ok(await page.locator('#vend .msg.win').isVisible());
+  await until(async () => (await dsSaved(page)).seen?.['1.0'] === true);
+  assert.equal((await dsSaved(page)).done?.['1.0'], undefined, 'step 1 alone does not mark the mission done');
+  await page.click('[data-v="go2"]');
+  assert.ok(await page.locator('#code').isVisible());
+  assert.ok(await page.locator('#stage').isHidden());
+  assert.equal(await page.locator('[data-step="2"][aria-disabled="true"]').count(), 0);
+  await page.fill('#code', await page.evaluate(() => DSQ.CH[1].missions[0].practice.langs.js.answer));
+  await page.click('#run');
+  await until(async () => (await dsSaved(page)).done?.['1.0'] === true);
+  assert.equal((await dsSaved(page)).xp, 10);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest mission page: 0.3 asks each question, replays the real step on a wrong answer, and opens step 2 after the last', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 0, mi: 3 });
+  await page.locator('#vbox .sc').waitFor();
+  assert.ok(await page.locator('#code').isHidden() && await page.locator('#langBar').isHidden(), 'the editor and the language row stay hidden at step 1');
+  const pauses = await page.evaluate(() => { const v = DSQ.CH[0].missions[3].visual; return v.pauses.map(p => ({ ask: p.ask, choices: p.choices, right: DSQ.visual.answerOf(v, p.step) })); });
+  await page.click('[data-v="step"]');
+  for (const [n, p] of pauses.entries()) {
+    await page.waitForFunction(ask => document.querySelector('#vqask')?.textContent === ask, p.ask);
+    assert.equal(await page.locator('[data-step="2"][aria-disabled="true"]').count(), 1, 'step 2 stays locked while questions remain');
+    if (n === 0) {
+      await page.click(`#vq [data-c="${p.choices.findIndex(c => c !== p.right)}"]`);
+      await page.waitForFunction(() => document.querySelector('#vsay').textContent.includes('Not quite'));
+      await dsIdle(page);
+      await page.waitForFunction(ask => document.querySelector('#vqask')?.textContent === ask, p.ask);
+    }
+    await page.click(`#vq [data-c="${p.choices.indexOf(p.right)}"]`);
+    await dsIdle(page);
+  }
+  await page.locator('#vend .msg.win').waitFor();
+  assert.match(await page.textContent('#vend .msg.win'), /You worked out every answer\./);
+  assert.doesNotMatch(await page.textContent('#vend .msg.win'), /Every answer was right/);
+  await until(async () => (await dsSaved(page)).seen?.['0.3'] === true);
+  await page.click('[data-v="go2"]');
+  assert.ok(await page.locator('#code').isVisible());
+  const bar = await page.$$eval('#langBar button', bs => bs.map(b => ({ lang: b.dataset.lang, text: b.textContent.trim(), pressed: b.getAttribute('aria-pressed'), disabled: b.disabled })));
+  const rows = await page.evaluate(() => DSQ.practice.PENDING.filter(r => r.mission === '0.3' || r.mission === '*').map(r => ({ lang: r.lang, issue: r.issue })));
+  assert.deepEqual(bar.map(b => b.lang), ['js', 'py', 'cpp', 'rs']);
+  assert.deepEqual(bar.map(b => b.text.split(' ')[0]), ['JavaScript', 'Python', 'C++', 'Rust']);
+  assert.deepEqual(bar.map(b => b.pressed), ['true', 'false', 'false', 'false']);
+  assert.deepEqual(bar.filter(b => b.disabled).map(b => b.lang), rows.map(r => r.lang), 'only a PENDING row disables a language');
+  for (const r of rows) assert.match(bar.find(b => b.lang === r.lang).text, new RegExp(`#${r.issue}`));
+  assert.equal(await page.inputValue('#code'), await page.evaluate(() => DSQ.CH[0].missions[3].practice.langs.js.starter));
+  assert.equal(await page.locator('#run svg').count(), 1);
+  assert.equal(await page.textContent('#runLabel'), 'Run tests');
+  assert.match(await page.textContent('#console'), /Press Run tests to check your code\./);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest mission page: reduced motion zeroes every item transition and keeps the highlight', async () => {
+  const { ctx, page, errors } = await dsPage({ reducedMotion: 'reduce' }, { ch: 1, mi: 0 });
+  await page.locator('#vbox .sc').waitFor();
+  await page.click('#vbar [data-b="0"]');
+  await dsIdle(page);
+  const d = await page.evaluate(() => [...document.querySelectorAll('#stage .sc-item')].map(e => getComputedStyle(e).transitionDuration));
+  assert.ok(d.length > 0 && d.every(x => x === '0s'), `transition durations: ${d}`);
+  assert.ok(await page.locator('#vbox .hi').count() >= 1, 'the highlight remains');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest mission page: 1.0 is finished with the keyboard alone and focus stays on the used button', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 1, mi: 0 });
+  await page.locator('#vbox .sc').waitFor();
+  await page.focus('#vbar [data-b="0"]');
+  const press = async key => { await page.keyboard.press(key); await dsIdle(page); };
+  await press('Enter');
+  assert.equal(await dsFocus(page), 'b0', 'focus stays on push red');
+  await press('Tab'); await press('Enter');
+  assert.equal(await dsFocus(page), 'b1');
+  await press('Tab'); await press('Tab');
+  assert.equal(await dsFocus(page), 'b3');
+  await press('Shift+Tab');
+  assert.equal(await dsFocus(page), 'b2');
+  await press('Enter');
+  assert.equal(await dsFocus(page), 'b2');
+  assert.ok(await page.locator('#vend .msg.win').isVisible());
+  for (let i = 0; i < 12 && !(await page.evaluate(() => document.activeElement.dataset.v === 'go2')); i++) await press('Tab');
+  assert.equal(await page.evaluate(() => document.activeElement.dataset.v), 'go2', 'Tab reaches Go to step 2');
+  await press('Enter');
+  assert.ok(await page.locator('#code').isVisible());
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'code');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest mission page: a saved done mission opens on step 2, and other missions have no step bar', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 0, mi: 0, done: { ...DS_CH0_DONE, '1.0': true } });
+  await dsInjectOpen(page, { title: 'Plain', goal: 'Run it.', explain: 'Fixture.', starter: '// go\n', answer: '// go\n' });
+  await page.locator('#code').waitFor();
+  assert.equal(await page.locator('.steps').count(), 0, 'a plain legacy mission has no step bar');
+  assert.ok(await page.locator('#code').isVisible());
+  await page.locator('.dots .dot').nth(3).click();
+  assert.equal(await page.locator('[data-step="2"][aria-current="step"]').count(), 1, '0.3 opens on step 2');
+  assert.ok(await page.locator('#code').isVisible());
+  assert.ok(await page.locator('#stage').isHidden());
+  await page.locator('.chap').nth(1).click();
+  await page.locator('.dots .dot').nth(0).click();
+  assert.equal(await page.locator('[data-step="2"][aria-current="step"]').count(), 1, '1.0 opens on step 2');
+  assert.ok(await page.locator('#code').isVisible());
+  await page.click('[data-step="1"]');
+  await page.locator('#vbox .sc').waitFor();
+  assert.ok(await page.locator('#code').isHidden(), 'a seen mission can replay step 1');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest mission page: a link mission is finished by keyboard, with focus and selection kept across repaints', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 0, mi: 0, done: DS_CH0_DONE });
+  await dsInjectOpen(page, DS_FIXTURE);
+  await page.locator('#vbox [data-head]').waitFor();
+  const sel = () => page.locator('#vbox .sc-sel').count();
+  const press = async key => { await page.keyboard.press(key); await dsIdle(page); };
+  await page.focus('#vbox [data-head]');
+  await press('Enter');
+  assert.equal(await sel(), 1, 'the head is marked as picked');
+  await press('Tab');
+  assert.equal(await dsFocus(page), 'l0');
+  await press('Enter');
+  assert.equal(await page.locator('#vbox [data-i]').count(), 1, 'the first link joined a');
+  assert.equal(await dsFocus(page), 'head', 'focus returns to the source node');
+  assert.equal(await sel(), 0, 'nothing stays marked after a link');
+  await press('Enter');
+  await press('Tab'); await press('Tab');
+  assert.equal(await dsFocus(page), 'l0');
+  await press('Enter');
+  assert.match(await page.textContent('#vsay'), /head/i, 'the refusal reason shows');
+  assert.equal(await dsFocus(page), 'head', 'a refusal also returns focus to the source');
+  assert.equal(await sel(), 0, 'a refusal clears the pick');
+  assert.match(await page.textContent('#vmoves'), /Moves 1 /, 'a refusal is not a move');
+  await press('Tab');
+  assert.equal(await dsFocus(page), 'i0');
+  await press('Enter');
+  assert.equal(await sel(), 1);
+  await press('Escape');
+  assert.equal(await sel(), 0, 'Escape clears the pick');
+  assert.equal(await dsFocus(page), 'i0', 'Escape keeps focus on the source');
+  await press('Enter');
+  await press('Tab');
+  assert.equal(await dsFocus(page), 'l0');
+  await press('Enter');
+  assert.equal(await page.locator('#vbox [data-i]').count(), 2);
+  assert.equal(await dsFocus(page), 'i0');
+  await page.locator('#vend .msg.win').waitFor();
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest mission page: the real 3.0 is finished by keyboard alone, with focus and selection kept across repaints', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 3, mi: 0 });
+  await page.locator('#vbox [data-head]').waitFor();
+  const sel = () => page.locator('#vbox .sc-sel').count();
+  const press = async (...keys) => { for (const key of keys) { await page.keyboard.press(key); await dsIdle(page); } };
+  assert.equal(await page.locator('#vbox [data-l]').count(), 3, 'the three loose nodes are drawn');
+  await page.click('#vbar [data-b="0"]');
+  await dsIdle(page);
+  assert.ok((await page.textContent('#vsay')).trim().length >= 10, 'walking an empty chain says why');
+  assert.match(await page.textContent('#vmoves'), /Moves 0 · fewest 3/);
+  await page.focus('#vbox [data-head]');
+  await press('Enter');
+  assert.equal(await sel(), 1, 'the head is marked as picked');
+  await press('Tab', 'Tab');
+  assert.equal(await dsFocus(page), 'l1', 'the second loose node is the 1');
+  await press('Enter');
+  assert.equal(await page.locator('#vbox [data-i]').count(), 1, 'the first link made 1 the head');
+  assert.equal(await dsFocus(page), 'head', 'focus returns to the source node');
+  assert.equal(await sel(), 0, 'nothing stays marked after a link');
+  await press('Tab');
+  assert.equal(await dsFocus(page), 'i0');
+  await press('Enter', 'Tab', 'Tab');
+  assert.equal(await dsFocus(page), 'l1', 'the loose nodes are now 3 and 2');
+  await press('Enter');
+  assert.equal(await page.locator('#vbox [data-i]').count(), 2);
+  assert.equal(await dsFocus(page), 'i0');
+  await press('Tab');
+  assert.equal(await dsFocus(page), 'i1');
+  await press('Enter', 'Tab');
+  assert.equal(await dsFocus(page), 'l0', 'only the 3 is loose');
+  await press('Enter');
+  assert.match(await page.textContent('#vmoves'), /Moves 3 · fewest 3/);
+  await page.locator('#vend .msg.win').waitFor();
+  assert.equal(await page.locator('#vbox [data-l]').count(), 0, 'no loose node is left');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest mission page: a link mission can be finished by dragging a node onto a loose node', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 0, mi: 0, done: DS_CH0_DONE });
+  await dsInjectOpen(page, DS_FIXTURE);
+  await page.locator('#vbox [data-head]').waitFor();
+  const drag = async (from, to) => {
+    const a = await dsCentre(page, from), b = await dsCentre(page, to);
+    await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 6 }); await page.mouse.up();
+    await dsIdle(page);
+  };
+  await drag('#vbox [data-head]', '#vbox [data-l="0"]');
+  assert.equal(await page.locator('#vbox [data-i]').count(), 1);
+  await drag('#vbox [data-i="0"]', '#vbox [data-l="0"]');
+  assert.equal(await page.locator('#vbox [data-i]').count(), 2);
+  await page.locator('#vend .msg.win').waitFor();
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest mission page: a mission whose picture fails validation shows one message, keeps step 2 locked and throws nothing', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 0, mi: 0, done: DS_CH0_DONE });
+  const logged = [];
+  page.on('console', m => { if (m.type() === 'error') logged.push(m.text()); });
+  await dsInjectOpen(page, dsBrokenMission);
+  await page.getByText('picture is broken').waitFor();
+  assert.equal(await page.locator('[data-step="2"][aria-disabled="true"]').count(), 1);
+  assert.ok(await page.locator('#stage').isHidden());
+  assert.equal(await page.locator('#vbar').count(), 0, 'no controls are built');
+  assert.ok(await page.locator('#code').isHidden(), 'the editor stays locked');
+  await page.click('.dots .dot >> nth=0');
+  assert.ok(await page.locator('#code').isVisible(), 'the other missions keep working');
+  assert.deepEqual(errors, []);
+  assert.deepEqual(logged, []);
+  await ctx.close();
+});
+
+const DS_03 = { ch: 0, mi: 3, seen: { '0.3': true } };
+const dsLang = (page, mission, lang, key) => page.evaluate(([m, l, k]) => DSQ.CH[0].missions[m].practice.langs[l][k], [mission, lang, key]);
+const dsRows = page => page.$$eval('#console .tests li', es => es.map(e => e.textContent.trim()));
+const dsRun = async (page, src) => { await page.fill('#code', src); await page.click('#run'); await until(async () => (await dsRows(page)).length > 0); return dsRows(page); };
+const DS_PRACTICE = {
+  ...DS_FIXTURE, title: 'Double it', goal: 'Return every number doubled.',
+  practice: { fn: { name: 'double', sig: { args: [['nums', 'ints']], ret: 'ints' }, tests: [{ args: [[1, 2]], want: [2, 4] }, { args: [[]], want: [] }] },
+    langs: {
+      js: { starter: 'function double(nums) {\n}\n', answer: 'function double(nums) {\n  return nums.map(n => n * 2);\n}\n', wrong: 'function double(nums) {\n  return nums;\n}\n', lazy: 'function double(nums) {\n  return [2, 4];\n}\n' },
+      py: { starter: 'def double(nums):\n    pass\n', answer: 'def double(nums):\n    out = []\n    for n in nums:\n        out.append(n * 2)\n    return out\n', wrong: 'def double(nums):\n    return nums\n', lazy: 'def double(nums):\n    return [2, 4]\n' },
+    } },
+};
+
+test('ds-quest practice page: Run tests passes 0.3 only on its own answer, and draws the Structure view for JavaScript', async () => {
+  const { ctx, page, errors } = await dsPage({}, DS_03);
+  await page.locator('#code').waitFor();
+  const rows = await dsRun(page, await dsLang(page, 3, 'js', 'wrong'));
+  assert.equal(rows.length, 4);
+  assert.equal(rows[0], '✗ sum([1,2,3]) should give 6, but gave 5');
+  assert.equal((await dsSaved(page)).done?.['0.3'], undefined, 'a wrong answer does not finish the mission');
+  const other = await dsRun(page, await page.evaluate(() => DSQ.CH[0].missions[4].practice.langs.js.answer));
+  assert.ok(other.every(r => r.startsWith('✗')), 'the answer to another mission fails');
+  assert.equal((await dsSaved(page)).done?.['0.3'], undefined);
+  const good = await dsRun(page, await dsLang(page, 3, 'js', 'answer'));
+  assert.equal(good.length, 4);
+  assert.ok(good.every(r => r.startsWith('✓ sum(')), good.join('|'));
+  assert.match(await page.textContent('#console .msg.win'), /Mission complete! \+10 XP/);
+  await until(async () => { const s = await dsSaved(page); return s.done?.['0.3'] === true && s.xp === 10; });
+  assert.match(await page.textContent('#map'), /Defined[\s\S]*sum/);
+  assert.equal(await page.textContent('#mapSub'), 'What your program left behind when it finished.');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest practice page: each language keeps its own text, Python runs, and the Structure view is JavaScript only', async () => {
+  const { ctx, page, errors } = await dsPage({}, DS_03);
+  await page.locator('#code').waitFor();
+  const jsText = 'function sum(nums){ return 1; }';
+  await page.fill('#code', jsText);
+  await page.click('#langBar [data-lang="py"]');
+  assert.equal(await page.inputValue('#code'), await dsLang(page, 3, 'py', 'starter'));
+  assert.match(await page.textContent('#fileName'), /\.py$/);
+  assert.match(await page.textContent('#edNote'), /built-in interpreter/);
+  assert.match(await page.getAttribute('#code', 'aria-label'), /Python/);
+  await until(async () => (await dsSaved(page)).lang === 'py');
+  await page.fill('#code', 'def sum(nums):\n    return 0');
+  await until(async () => (await dsSaved(page)).codes?.['0.3.py'] === 'def sum(nums):\n    return 0');
+  assert.equal((await dsSaved(page)).code['0.3'], jsText, 'typing Python leaves the JavaScript text alone');
+  const rows = await dsRun(page, await dsLang(page, 3, 'py', 'answer'));
+  assert.equal(rows.length, 4);
+  assert.ok(rows.every(r => r.startsWith('✓')), rows.join('|'));
+  await until(async () => (await dsSaved(page)).done?.['0.3'] === true);
+  assert.equal(await page.locator('#map > *').count(), 0);
+  assert.equal(await page.textContent('#mapSub'), 'The Structure view shows JavaScript programs only.');
+  assert.ok(await page.locator('#band').isHidden());
+  assert.equal(await page.locator('#gutter .bad').count(), 0);
+  assert.ok(await page.locator('.mapCol').isVisible());
+  await page.click('#langBar [data-lang="js"]');
+  assert.equal(await page.inputValue('#code'), jsText);
+  assert.equal(await page.locator('#console .tests').count(), 0, 'switching language clears the test list');
+  await page.click('#run');
+  await until(async () => (await page.textContent('#mapSub')) === 'What your program left behind when it finished.');
+  await page.click('#langBar [data-lang="py"]');
+  await until(async () => (await dsSaved(page)).lang === 'py');
+  await page.reload();
+  await page.locator('#langBar').waitFor();
+  assert.equal(await page.getAttribute('#langBar [data-lang="py"]', 'aria-pressed'), 'true', 'the pick survives a reload');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest practice page: Reset code asks twice, then restores the starter of the picked language only', async () => {
+  const { ctx, page, errors } = await dsPage({}, DS_03);
+  await page.locator('#code').waitFor();
+  const jsText = 'function sum(nums){ return 1; }', pyText = 'def sum(nums):\n    return 0';
+  await page.fill('#code', jsText);
+  await page.click('#langBar [data-lang="py"]');
+  await page.fill('#code', pyText);
+  await until(async () => (await dsSaved(page)).codes?.['0.3.py'] === pyText);
+  await page.click('#resetCode');
+  assert.equal(await page.textContent('#resetCode'), 'Click again to reset');
+  assert.ok(await page.locator('#resetCode.armed').count() === 1, 'the first click arms the button');
+  assert.equal(await page.inputValue('#code'), pyText, 'the first click keeps the typed text');
+  await page.waitForTimeout(400);
+  assert.equal((await dsSaved(page)).codes['0.3.py'], pyText, 'nothing is saved over the typed text');
+  await page.click('#resetCode');
+  const starter = await dsLang(page, 3, 'py', 'starter');
+  assert.equal(await page.inputValue('#code'), starter, 'the second click restores the Python starter');
+  assert.equal(await page.textContent('#resetCode'), 'Reset code');
+  await until(async () => (await dsSaved(page)).codes?.['0.3.py'] === starter);
+  const saved = await dsSaved(page);
+  assert.equal(saved.code['0.3'], jsText, 'the JavaScript text is untouched');
+  assert.equal(saved.lang, 'py');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest practice page: Reset code on a script-step mission restores the JavaScript starter and keeps the Python pick', async () => {
+  for (const mi of [0, 1, 2]) {
+    const { ctx, page, errors } = await dsPage({}, { ch: 0, mi, seen: { ['0.' + mi]: true }, lang: 'py' });
+    await page.locator('#code').waitFor();
+    await page.fill('#code', 'typed over the starter');
+    await page.click('#resetCode');
+    await page.click('#resetCode');
+    const starter = await page.evaluate(i => DSQ.CH[0].missions[i].starter, mi);
+    assert.ok(starter.length > 0, `0.${mi} has a starter`);
+    assert.equal(await page.inputValue('#code'), starter, `0.${mi}: Reset code restores the script-step starter`);
+    await until(async () => (await dsSaved(page)).code?.['0.' + mi] === starter);
+    const saved = await dsSaved(page);
+    assert.equal(saved.lang, 'py', `0.${mi}: the saved language pick is unchanged`);
+    assert.deepEqual(saved.codes, {}, `0.${mi}: no per-language text is saved`);
+    assert.deepEqual(errors, [], `0.${mi}`);
+    await ctx.close();
+  }
+});
+
+test('ds-quest practice page: typing after a Python run clears the test list and the Structure view', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ...DS_03, lang: 'py' });
+  await page.locator('#code').waitFor();
+  await dsRun(page, await dsLang(page, 3, 'py', 'answer'));
+  assert.equal(await page.locator('#console .tests').count(), 1);
+  await page.fill('#code', 'def sum(nums):\n    return 1');
+  assert.equal(await page.locator('#console .tests').count(), 0, 'typing clears the test list');
+  assert.equal(await page.locator('#map > *').count(), 0);
+  assert.equal(await page.locator('#map.stale').count(), 0);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest practice page: a program that fails as a whole shows its message once above label-only rows', async () => {
+  const { ctx, page, errors } = await dsPage({}, DS_03);
+  await page.locator('#code').waitFor();
+  const rows = await dsRun(page, 'function sum(nums){ return ');
+  assert.equal(await page.locator('#console .msg.err:has(+ ul.tests)').count(), 1);
+  const msg = await page.textContent('#console .msg.err:has(+ ul.tests) .h');
+  assert.ok(msg.trim().length > 0);
+  assert.ok(await page.locator('#console .msg.err + ul.tests').count() === 1, 'the message sits above the rows');
+  assert.ok(rows.every(r => r.startsWith('✗') && !r.includes(msg.trim())), rows.join('|'));
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest practice page: the hint follows the language and Show how appears only with a how list', async () => {
+  const { ctx, page, errors } = await dsPage({}, DS_03);
+  await page.locator('#code').waitFor();
+  assert.equal(await page.locator('[data-act="how"]').count(), 1, '0.3 shows Show how');
+  await page.click('[data-act="hint"]');
+  assert.equal(await page.locator('#hintBox').isVisible(), true);
+  assert.ok(await page.locator('#hintBox pre span').count() > 0, 'the JavaScript hint is highlighted');
+  assert.equal((await page.textContent('#hintBox pre')), await dsLang(page, 3, 'js', 'answer'));
+  await page.click('#langBar [data-lang="py"]');
+  assert.equal(await page.locator('#hintBox pre span').count(), 0);
+  assert.equal(await page.textContent('#hintBox pre'), await dsLang(page, 3, 'py', 'answer'));
+  assert.deepEqual(errors, []);
+  await ctx.close();
+
+  const bare = await dsPage({}, { ch: 0, mi: 0, done: DS_CH0_DONE, seen: { '0.5': true } });
+  await dsInjectOpen(bare.page, DS_PRACTICE);
+  await bare.page.locator('[data-act="hint"]').waitFor();
+  assert.equal(await bare.page.locator('[data-act="how"]').count(), 0, 'a mission without a how list has no Show how');
+  assert.deepEqual(bare.errors, []);
+  await bare.ctx.close();
+
+  const second = await dsPage({}, { ch: 0, mi: 0, done: DS_CH0_DONE, seen: { '0.5': true } });
+  await dsInjectOpen(second.page, { ...DS_PRACTICE, how: ['First <code>step</code>.', 'Second step.'] });
+  const btn = second.page.locator('[data-act="how"]');
+  await btn.waitFor();
+  assert.equal(await btn.getAttribute('aria-expanded'), 'false');
+  assert.ok(await second.page.locator('#howBox').isHidden());
+  await btn.click();
+  assert.equal(await btn.getAttribute('aria-expanded'), 'true');
+  assert.ok(await second.page.locator('#howBox').isVisible());
+  await btn.click();
+  assert.equal(await btn.getAttribute('aria-expanded'), 'false');
+  assert.ok(await second.page.locator('#howBox').isHidden());
+  assert.deepEqual(second.errors, []);
+  await second.ctx.close();
+});
+
+test('ds-quest practice page: the picked language carries to another practice mission', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 0, mi: 0, done: DS_CH0_DONE, seen: { '0.5': true }, lang: 'py' });
+  await dsInjectOpen(page, DS_PRACTICE);
+  await page.locator('#langBar button').first().waitFor();
+  assert.equal(await page.getAttribute('#langBar [data-lang="py"]', 'aria-pressed'), 'true');
+  for (const l of ['cpp', 'rs']) assert.match(await page.textContent(`#langBar [data-lang="${l}"]`), /unavailable/);
+  const rows = await dsRun(page, DS_PRACTICE.practice.langs.py.answer);
+  assert.deepEqual(rows, ['✓ double([1,2])', '✓ double([])']);
+  await until(async () => { const s = await dsSaved(page); return s.done?.['0.5'] === true && s.codes?.['0.5.py'] === DS_PRACTICE.practice.langs.py.answer; });
+  assert.equal((await dsSaved(page)).lang, 'py');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest practice page: a class block lists its tests as sequence N, and a long generated argument is clipped to 120 characters', async () => {
+  const cls = await dsPage({}, { ch: 2, mi: 1, seen: { '2.1': true } });
+  await cls.page.locator('#code').waitFor();
+  const rows = await dsRun(cls.page, await cls.page.evaluate(() => DSQ.CH[2].missions[1].practice.langs.js.answer));
+  assert.deepEqual(rows, ['✓ sequence 1', '✓ sequence 2']);
+  assert.deepEqual(cls.errors, []);
+  await cls.ctx.close();
+
+  const long = Array.from({ length: 60 }, (_, i) => 100 + i);
+  const fixture = { ...DS_PRACTICE, practice: { ...DS_PRACTICE.practice, fn: { ...DS_PRACTICE.practice.fn, tests: [{ args: [long], want: long.map(n => n * 2) }] } } };
+  const { ctx, page, errors } = await dsPage({}, { ch: 0, mi: 0, done: DS_CH0_DONE, seen: { '0.5': true }, lang: 'py' });
+  await dsInjectOpen(page, fixture);
+  await page.locator('#langBar button').first().waitFor();
+  const [label] = await dsRun(page, fixture.practice.langs.py.answer);
+  assert.equal(label.length, '✓ '.length + 120);
+  assert.ok(label.startsWith('✓ double([100,101,') && label.endsWith('...'), label);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest practice page: a language with a PENDING row is disabled with its issue, and a visit does not change the saved pick', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 0, mi: 0, seen: { '0.3': true }, lang: 'py' });
+  await page.evaluate(() => DSQ.practice.PENDING.push({ mission: '0.3', lang: 'py', issue: 309 }));
+  await page.click('.dots .dot[data-mi="3"]');
+  await page.locator('#langBar button').first().waitFor();
+  assert.ok(await page.locator('#langBar [data-lang="py"]').isDisabled());
+  assert.match(await page.textContent('#langBar [data-lang="py"]'), /#309/);
+  assert.equal(await page.getAttribute('#langBar [data-lang="js"]', 'aria-pressed'), 'true', 'JavaScript is used instead');
+  await until(async () => (await dsSaved(page)).mi === 3);
+  assert.equal((await dsSaved(page)).lang, 'py');
+  await page.reload();
+  await page.locator('#langBar button').first().waitFor();
+  assert.equal(await page.evaluate(() => DSQ.practice.PENDING.filter(r => r.mission === '0.3' && r.lang === 'py').length), 0, 'the row lived in page memory only');
+  assert.equal(await page.getAttribute('#langBar [data-lang="py"]', 'aria-pressed'), 'true');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest practice page: a missing engine reads unavailable, and a mission with no usable language shows a read-only editor', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 0, mi: 0, done: DS_CH0_DONE, seen: { '0.3': true, '0.5': true }, lang: 'cpp' });
+  await page.evaluate(() => { DSQ.practice.RUNNERS.rs.available = () => false; });
+  await page.click('.dots .dot[data-mi="3"]');
+  await page.locator('#langBar button').first().waitFor();
+  assert.match(await page.textContent('#langBar [data-lang="rs"]'), /unavailable/);
+  assert.ok(await page.locator('#langBar [data-lang="rs"]').isDisabled());
+  const none = { ...DS_PRACTICE, title: 'No language', practice: { ...DS_PRACTICE.practice, langs: { py: { starter: 'x' }, cpp: { starter: 'x' }, rs: { starter: 'x' } } } };
+  await page.evaluate(() => { for (const lang of ['py', 'cpp', 'rs']) DSQ.practice.PENDING.push({ mission: '0.5', lang, issue: 309 }); });
+  await dsInjectOpen(page, none);
+  await until(async () => (await dsSaved(page)).mi === 5);
+  assert.equal(await page.locator('#langBar button:not(:disabled)').count(), 0);
+  assert.equal(await page.locator('#langBar button').count(), 4);
+  assert.ok(await page.$eval('#code', e => e.readOnly));
+  assert.equal(await page.inputValue('#code'), '');
+  assert.ok(await page.isDisabled('#run'));
+  assert.equal(await page.textContent('#edNote'), 'No language is ready for this mission yet.');
+  assert.equal(await page.textContent('#mapSub'), 'The Structure view shows JavaScript programs only.');
+  assert.equal((await dsSaved(page)).lang, 'cpp', 'the saved pick is untouched');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest practice page: a script-step mission keeps the JavaScript editor and its own check, and the other languages say why they are off', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 0, mi: 0, done: DS_CH0_DONE, lang: 'py' });
+  await dsInjectOpen(page, { title: 'Script step', goal: 'Run it.', explain: 'Fixture.', starter: '// go\n', answer: '// go\n', scriptStep: true });
+  await page.locator('#langBar button').first().waitFor();
+  assert.equal(await page.locator('#langBar button').count(), 4);
+  assert.equal(await page.getAttribute('#langBar [data-lang="js"]', 'aria-pressed'), 'true');
+  assert.ok(await page.locator('#langBar [data-lang="js"]').isEnabled());
+  for (const l of ['py', 'cpp', 'rs']) {
+    assert.ok(await page.locator(`#langBar [data-lang="${l}"]`).isDisabled());
+    const t = await page.textContent(`#langBar [data-lang="${l}"]`);
+    assert.match(t, /taught from mission 0\.3/);
+    assert.ok(!t.includes('#'), t);
+  }
+  await until(async () => (await dsSaved(page)).mi === 5);
+  assert.equal((await dsSaved(page)).lang, 'py');
+  assert.equal(await page.textContent('#runLabel'), 'Run');
+  await page.click('#run');
+  await until(async () => (await dsSaved(page)).done?.['0.5'] === true);
+  assert.match(await page.textContent('#console .msg.win'), /Mission complete/);
+  assert.equal(await page.textContent('#mapSub'), 'Nothing to draw yet.');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+const dsWon = page => page.locator('#vend .msg.win').isVisible();
+async function dsPlay(page, presses) {
+  for (const b of presses) { await page.click(`#vbar [data-b="${b}"]`); await dsIdle(page); }
+}
+async function dsNotWon(page, presses, why) {
+  await dsPlay(page, presses);
+  assert.equal(await dsWon(page), false, `${why} does not finish step 1`);
+  assert.equal(await page.locator('[data-step="2"][aria-disabled="true"]').count(), 1, `${why} leaves step 2 locked`);
+  await page.click('[data-v="reset"]');
+  await dsIdle(page);
+}
+
+const DS_OPERATE = [
+  { id: '0.0', ch: 0, mi: 0, no: [[[2, 1, 0], 'push Clatter, Juno, Mo'], [[0, 0, 0], 'push Mo three times']], win: [0, 1, 2] },
+  { id: '0.1', ch: 0, mi: 1, no: [[[0], 'reading box 0'], [[1], 'reading box 1'], [[2], 'reading box 2']], win: [3] },
+  { id: '0.2', ch: 0, mi: 2, no: [[[1, 3], 'push candle then pop'], [[3], 'pop alone'], [[0], 'push lantern alone']], win: [0, 3] },
+];
+
+for (const m of DS_OPERATE) {
+  test(`ds-quest mission page: ${m.id} finishes step 1 only on its own action, and step 2 shows the how list inline`, async () => {
+    const { ctx, page, errors } = await dsPage({}, { ch: m.ch, mi: m.mi });
+    await page.locator('#vbox .sc').waitFor();
+    for (const [presses, why] of m.no) await dsNotWon(page, presses, why);
+    await dsPlay(page, m.win);
+    await page.locator('#vend .msg.win').waitFor();
+    assert.match(await page.textContent('#vend .msg.win'), /Step 1 done!/);
+    if (m.id === '0.2') assert.match(await page.textContent('#vsay'), /lantern/, 'pop hands back the lantern');
+    await page.click('[data-v="go2"]');
+    await page.locator('#code').waitFor();
+    assert.ok(await page.locator('.how').isVisible(), `${m.id} lists how it works on step 2`);
+    assert.equal(await page.locator('[data-act="how"]').count(), 0, `${m.id} has no Show how button`);
+    assert.ok(await page.locator('#langBar [data-lang="js"]').isEnabled());
+    for (const l of ['py', 'cpp', 'rs']) {
+      assert.ok(await page.locator(`#langBar [data-lang="${l}"]`).isDisabled());
+      assert.match(await page.textContent(`#langBar [data-lang="${l}"]`), /taught from mission 0\.3/);
+    }
+    assert.deepEqual(errors, []);
+    await ctx.close();
+  });
+}
+
+test('ds-quest mission page: 0.4 shows a Show how button on step 2 instead of an inline list', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 0, mi: 4, seen: { '0.4': true } });
+  await page.locator('#code').waitFor();
+  const btn = page.locator('[data-act="how"]');
+  assert.equal(await btn.count(), 1);
+  assert.ok(await page.locator('.how').isHidden(), 'the steps stay closed until asked for');
+  await btn.click();
+  assert.ok(await page.locator('#howBox .how').isVisible());
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest mission page: 1.1 finishes step 1 on peek only, and never on a pop', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 1, mi: 1 });
+  await page.locator('#vbox .sc').waitFor();
+  await dsNotWon(page, [1], 'pop');
+  await dsNotWon(page, [1, 1], 'pop twice');
+  await dsPlay(page, [0]);
+  await page.locator('#vend .msg.win').waitFor();
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest mission page: 1.2 finishes step 1 on push 5, push 8, pop, and step 2 names the gaps for Python and C++', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 1, mi: 2 });
+  await page.locator('#vbox .sc').waitFor();
+  await dsNotWon(page, [1, 0, 2], 'push 8, push 5, pop');
+  await dsNotWon(page, [0, 1, 3], 'push 5, push 8, peek');
+  await dsNotWon(page, [0, 1], 'push 5, push 8');
+  await dsPlay(page, [0, 1, 2]);
+  await page.locator('#vend .msg.win').waitFor();
+  assert.match(await page.textContent('#vmoves'), /Moves 3 · fewest 3/);
+  await page.click('[data-v="go2"]');
+  await page.locator('#code').waitFor();
+  const py = page.locator('#langBar [data-lang="py"]'), cpp = page.locator('#langBar [data-lang="cpp"]');
+  assert.ok(await py.isDisabled() && await cpp.isDisabled());
+  assert.match(await py.textContent(), /not yet \(#309\)/);
+  assert.match(await cpp.textContent(), /not yet \(#310\)/);
+  assert.ok(await page.locator('#langBar [data-lang="js"]').isEnabled() && await page.locator('#langBar [data-lang="rs"]').isEnabled());
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest mission page: 1.3 asks about each bracket as plain text, with no literal tag', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 1, mi: 3 });
+  await page.locator('#vbox .sc').waitFor();
+  const pauses = await page.evaluate(() => { const v = DSQ.CH[1].missions[3].visual; return v.pauses.map(p => ({ ask: p.ask, choices: p.choices, right: DSQ.visual.answerOf(v, p.step) })); });
+  assert.equal(pauses[0].ask, 'The next character is ). Which opener comes off?');
+  for (const p of pauses) {
+    for (let i = 0; i < 8 && await page.locator('#vqask').count() === 0; i++) { await page.click('[data-v="step"]'); await dsIdle(page); }
+    await page.waitForFunction(ask => document.querySelector('#vqask')?.textContent === ask, p.ask);
+    assert.ok(!(await page.textContent('#vqask')).includes('<'), `no literal tag in: ${p.ask}`);
+    assert.equal(await page.locator('#vq code').count(), 0);
+    await page.click(`#vq [data-c="${p.choices.indexOf(p.right)}"]`);
+    await dsIdle(page);
+  }
+  await page.locator('#vend .msg.win').waitFor();
+  assert.match(await page.textContent('#vend .msg.win'), /Every answer was right\./);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest mission page: 2.0 finishes step 1 only on enqueue Juno, Mo, Clatter then dequeue, in the fewest 4 moves', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 2, mi: 0 });
+  await page.locator('#vbox .sc').waitFor();
+  assert.match(await page.textContent('#vmoves'), /Moves 0 · fewest 4/);
+  await dsNotWon(page, [1, 0, 3], 'enqueue Mo, Juno, then dequeue');
+  await dsNotWon(page, [0, 1, 2], 'three enqueues with no dequeue');
+  await dsPlay(page, [0, 1, 2, 3]);
+  await page.locator('#vend .msg.win').waitFor();
+  assert.match(await page.textContent('#vend .msg.win'), /Step 1 done!/);
+  assert.match(await page.textContent('#vmoves'), /Moves 4 · fewest 4/);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest mission page: 2.2 keeps the question open after a wrong answer and ends with "You worked out every answer."', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 2, mi: 2 });
+  await page.locator('#vbox .sc').waitFor();
+  const pauses = await page.evaluate(() => { const v = DSQ.CH[2].missions[2].visual; return v.pauses.map(p => ({ ask: p.ask, choices: p.choices, right: DSQ.visual.answerOf(v, p.step) })); });
+  assert.deepEqual(pauses.map(p => p.right), ['Clatter', 'Juno', 'Pip']);
+  for (const [n, p] of pauses.entries()) {
+    for (let i = 0; i < 8 && await page.locator('#vqask').count() === 0; i++) { await page.click('[data-v="step"]'); await dsIdle(page); }
+    await page.waitForFunction(ask => document.querySelector('#vqask')?.textContent === ask, p.ask);
+    if (n === 0) {
+      await page.click(`#vq [data-c="${p.choices.indexOf('Juno')}"]`);
+      await page.waitForFunction(() => document.querySelector('#vsay').textContent.includes('Not quite. Here is what really happens:'));
+      await dsIdle(page);
+      await page.waitForFunction(ask => document.querySelector('#vqask')?.textContent === ask, p.ask);
+      assert.equal(await dsWon(page), false, 'a wrong answer does not finish step 1');
+    }
+    await page.click(`#vq [data-c="${p.choices.indexOf(p.right)}"]`);
+    await dsIdle(page);
+  }
+  await page.locator('#vend .msg.win').waitFor();
+  assert.match(await page.textContent('#vend .msg.win'), /You worked out every answer\./);
+  assert.doesNotMatch(await page.textContent('#vend .msg.win'), /Every answer was right/);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest mission page: 3.2 is titled LinkedChain and finishes on addFirst 1, add (end) 9, removeFirst, not on add (end) 1', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 3, mi: 2 });
+  await page.locator('#vbox .sc').waitFor();
+  assert.match(await page.textContent('#mission h2'), /A LinkedChain class/);
+  assert.match(await page.textContent('#vmoves'), /Moves 0 · fewest 3/);
+  await dsNotWon(page, [1, 2, 3], 'add (end) 1, add (end) 9, removeFirst');
+  await dsNotWon(page, [0, 2], 'addFirst 1, add (end) 9 with no removeFirst');
+  await dsPlay(page, [0, 2, 3]);
+  await page.locator('#vend .msg.win').waitFor();
+  assert.match(await page.textContent('#vend .msg.win'), /Step 1 done!/);
+  assert.match(await page.textContent('#vmoves'), /Moves 3 · fewest 3/);
+  assert.deepEqual(await page.$$eval('#vbox [data-i] .sc-val', es => es.map(e => e.textContent)), ['4', '7', '9']);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest mission page: 3.3 shows the not-flipped-yet row shrink, labels the head prev, and ends as 4, 3, 2, 1', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 3, mi: 3 });
+  await page.locator('#vbox .sc').waitFor();
+  const look = () => page.evaluate(() => {
+    const vals = el => [...el.querySelectorAll('.sc-val')].map(e => e.textContent);
+    const rest = [...document.querySelectorAll('#vbox .sc-loose')].find(r => r.querySelector('.sc-tag').textContent === 'not flipped yet');
+    return { ptr: document.querySelector('#vbox [data-head] .sc-ptr').textContent, chain: vals(document.querySelector('#vbox .sc-flow')), rest: rest ? vals(rest) : null };
+  });
+  const before = await look();
+  assert.equal(before.ptr, 'head');
+  assert.equal(before.rest, null, 'no row before the first flip');
+  const pauses = await page.evaluate(() => { const v = DSQ.CH[3].missions[3].visual; return v.pauses.map(p => ({ ask: p.ask, choices: p.choices, right: DSQ.visual.answerOf(v, p.step) })); });
+  assert.deepEqual(pauses.map(p => p.right), [1, 2, 3, 3]);
+  const seen = [];
+  await page.click('[data-v="step"]');
+  await dsIdle(page);
+  for (const p of pauses) {
+    await page.waitForFunction(ask => document.querySelector('#vqask')?.textContent === ask, p.ask);
+    seen.push(await look());
+    await page.click(`#vq [data-c="${p.choices.indexOf(p.right)}"]`);
+    await dsIdle(page);
+  }
+  assert.deepEqual(seen.map(s => s.rest), [['2', '3', '4'], ['3', '4'], ['4'], null]);
+  assert.deepEqual(seen.map(s => s.ptr), ['prev', 'prev', 'prev', 'head']);
+  assert.deepEqual(seen.map(s => s.chain.length), [1, 2, 3, 4]);
+  await page.locator('#vend .msg.win').waitFor();
+  assert.deepEqual(await page.$$eval('#vbox [data-i] .sc-val', es => es.map(e => e.textContent)), ['4', '3', '2', '1']);
+  assert.match(await page.textContent('#vend .msg.win'), /Every answer was right\./);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest mission page: 4.0 finishes step 1 on set umbrella, set hat, get umbrella, and step 2 offers JavaScript and Python only', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 4, mi: 0 });
+  await page.locator('#vbox .sc').waitFor();
+  await dsNotWon(page, [0, 2, 3], 'set umbrella, set scarf, get umbrella');
+  await dsNotWon(page, [0, 1], 'set umbrella, set hat with no get');
+  await dsPlay(page, [0, 1, 3]);
+  await page.locator('#vend .msg.win').waitFor();
+  assert.match(await page.textContent('#vend .msg.win'), /Step 1 done!/);
+  assert.match(await page.textContent('#vmoves'), /Moves 3 · fewest 3/);
+  await page.click('[data-v="go2"]');
+  await page.locator('#code').waitFor();
+  assert.match(await page.inputValue('#code'), /function lookupAll/);
+  await page.click('#langBar [data-lang="py"]');
+  assert.match(await page.inputValue('#code'), /def lookup_all/);
+  assert.match(await page.textContent('#langBar [data-lang="cpp"]'), /not yet \(#310\)/);
+  assert.match(await page.textContent('#langBar [data-lang="rs"]'), /not yet \(#311\)/);
+  assert.ok(await page.locator('#langBar [data-lang="cpp"]').isDisabled() && await page.locator('#langBar [data-lang="rs"]').isDisabled());
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest mission page: 4.1 finishes step 1 on add 5 then has 5, and not on add 7 then has 5', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 4, mi: 1 });
+  await page.locator('#vbox .sc').waitFor();
+  await dsNotWon(page, [2, 3], 'add 7, has 5');
+  await dsNotWon(page, [1], 'add 5 with no has');
+  await dsPlay(page, [1, 3]);
+  await page.locator('#vend .msg.win').waitFor();
+  assert.match(await page.textContent('#vend .msg.win'), /Step 1 done!/);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+async function dsAnswerAll(page, ch, mi, wrongFirst) {
+  const pauses = await page.evaluate(([c, m]) => { const v = DSQ.CH[c].missions[m].visual; return v.pauses.map(p => ({ ask: p.ask, choices: p.choices, right: DSQ.visual.answerOf(v, p.step) })); }, [ch, mi]);
+  for (const [n, p] of pauses.entries()) {
+    for (let i = 0; i < 8 && await page.locator('#vqask').count() === 0; i++) { await page.click('[data-v="step"]'); await dsIdle(page); }
+    await page.waitForFunction(ask => document.querySelector('#vqask')?.textContent === ask, p.ask);
+    if (wrongFirst && n === 0) {
+      await page.click(`#vq [data-c="${p.choices.findIndex(c => c !== p.right)}"]`);
+      await page.waitForFunction(() => document.querySelector('#vsay').textContent.includes('Not quite. Here is what really happens:'));
+      await dsIdle(page);
+      await page.waitForFunction(ask => document.querySelector('#vqask')?.textContent === ask, p.ask);
+      assert.equal(await dsWon(page), false, 'a wrong answer does not finish step 1');
+    }
+    await page.click(`#vq [data-c="${p.choices.indexOf(p.right)}"]`);
+    await dsIdle(page);
+  }
+  // The step ends only when the walk reaches its last step, which can come after the last question.
+  for (let i = 0; i < 10 && !await dsWon(page); i++) { await page.click('[data-v="step"]'); await dsIdle(page); }
+  await page.locator('#vend .msg.win').waitFor();
+  return pauses;
+}
+
+test('ds-quest mission page: 4.2 asks three counts, keeps the question open after a wrong answer, and ends with "You worked out every answer."', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 4, mi: 2 });
+  await page.locator('#vbox .sc').waitFor();
+  const pauses = await dsAnswerAll(page, 4, 2, true);
+  assert.equal(pauses.length, 3);
+  assert.match(await page.textContent('#vend .msg.win'), /You worked out every answer\./);
+  assert.doesNotMatch(await page.textContent('#vend .msg.win'), /Every answer was right/);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest mission page: 4.3 asks three yes or no questions (false, false, true) and ends with every answer right', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 4, mi: 3 });
+  await page.locator('#vbox .sc').waitFor();
+  const pauses = await dsAnswerAll(page, 4, 3, false);
+  assert.deepEqual(pauses.map(p => p.right), [false, false, true]);
+  assert.match(await page.textContent('#vend .msg.win'), /Every answer was right\./);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest mission page: 4.4 asks which partner each number looks for with target 12 (10, 4, 8)', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 4, mi: 4 });
+  await page.locator('#vbox .sc').waitFor();
+  const pauses = await dsAnswerAll(page, 4, 4, false);
+  assert.deepEqual(pauses.map(p => p.right), [10, 4, 8]);
+  assert.match(await page.textContent('#vend .msg.win'), /Every answer was right\./);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest mission page: 5.0 refuses the wrong sides, finishes on 3 left and 10 right, and step 2 offers all four languages', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 5, mi: 0 });
+  await page.locator('#vbox .sc').waitFor();
+  assert.match(await page.textContent('#vmoves'), /Moves 0 · fewest 2/);
+  for (const [b, say] of [[1, /3 cannot go on the right of 8/], [2, /10 cannot go on the left of 8/]]) {
+    await page.click(`#vbar [data-b="${b}"]`);
+    await dsIdle(page);
+    assert.match(await page.textContent('#vsay'), say);
+    assert.match(await page.textContent('#vmoves'), /Moves 0 /, 'a refusal is not a move');
+    assert.equal(await dsWon(page), false);
+  }
+  await dsPlay(page, [0, 3]);
+  await page.locator('#vend .msg.win').waitFor();
+  assert.match(await page.textContent('#vend .msg.win'), /Step 1 done!/);
+  assert.match(await page.textContent('#vmoves'), /Moves 2 · fewest 2/);
+  await page.click('[data-v="go2"]');
+  await page.locator('#code').waitFor();
+  assert.match(await page.inputValue('#code'), /function plantTree/);
+  await page.click('#langBar [data-lang="py"]');
+  assert.match(await page.inputValue('#code'), /def plant_tree/);
+  for (const l of ['js', 'py', 'cpp', 'rs']) {
+    assert.ok(await page.locator(`#langBar [data-lang="${l}"]`).isEnabled(), `${l} is enabled`);
+    assert.doesNotMatch(await page.textContent(`#langBar [data-lang="${l}"]`), /not yet/);
+  }
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest mission page: 5.1 asks three heights (2, 2, 3), keeps the question open after a wrong answer, and ends with "You worked out every answer."', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 5, mi: 1 });
+  await page.locator('#vbox .sc').waitFor();
+  const pauses = await dsAnswerAll(page, 5, 1, true);
+  assert.deepEqual(pauses.map(p => p.right), [2, 2, 3]);
+  assert.match(await page.textContent('#vend .msg.win'), /You worked out every answer\./);
+  assert.doesNotMatch(await page.textContent('#vend .msg.win'), /Every answer was right/);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest mission page: 5.2 refuses insert 3, does not finish on insert 1, 4, 9, and finishes on insert 1, 4, 7', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 5, mi: 2 });
+  await page.locator('#vbox .sc').waitFor();
+  assert.match(await page.textContent('#vmoves'), /Moves 0 · fewest 3/);
+  await dsPlay(page, [4]);
+  assert.match(await page.textContent('#vsay'), /3 is already in the tree/);
+  assert.match(await page.textContent('#vmoves'), /Moves 0 /, 'a refusal is not a move');
+  await dsNotWon(page, [0, 1, 3], 'insert 1, 4, 9');
+  await dsPlay(page, [0, 1, 2]);
+  await page.locator('#vend .msg.win').waitFor();
+  assert.match(await page.textContent('#vend .msg.win'), /Step 1 done!/);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest mission page: 5.3 asks which value the in-order walk visits next (4, 6, 8)', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 5, mi: 3 });
+  await page.locator('#vbox .sc').waitFor();
+  const pauses = await dsAnswerAll(page, 5, 3, false);
+  assert.deepEqual(pauses.map(p => p.right), [4, 6, 8]);
+  assert.match(await page.textContent('#vend .msg.win'), /Every answer was right\./);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest mission page: 5.4 asks which way the search for 4 turns (right, left, found)', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 5, mi: 4 });
+  await page.locator('#vbox .sc').waitFor();
+  const pauses = await dsAnswerAll(page, 5, 4, false);
+  assert.deepEqual(pauses.map(p => p.right), ['right', 'left', 'found']);
+  assert.match(await page.textContent('#vend .msg.win'), /Every answer was right\./);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest practice page: an old save keeps its JavaScript text under code, and other languages go under codes', async () => {
+  const old = 'function sum(nums){ return 7; }';
+  const { ctx, page, errors } = await dsPage({}, { ch: 0, mi: 3, seen: { '0.3': true }, done: { '0.3': true }, code: { '0.3': old } });
+  await page.locator('#code').waitFor();
+  assert.equal(await page.inputValue('#code'), old);
+  assert.equal((await dsSaved(page)).code['0.3'], old);
+  const typed = 'function sum(nums){ return 8; }';
+  await page.fill('#code', typed);
+  await until(async () => (await dsSaved(page)).code['0.3'] === typed);
+  assert.ok(!('0.3.js' in ((await dsSaved(page)).codes || {})), 'JavaScript never lands in codes');
+  await page.click('#langBar [data-lang="py"]');
+  await page.fill('#code', 'def sum(nums):\n    return 9');
+  await until(async () => (await dsSaved(page)).codes?.['0.3.py'] === 'def sum(nums):\n    return 9');
+  assert.equal((await dsSaved(page)).code['0.3'], typed);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest practice page: a failing run fits at 1280 and 390 px, light and dark', async () => {
+  for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 800 }]) {
+    for (const colorScheme of ['light', 'dark']) {
+      const where = `${viewport.width}px ${colorScheme}`;
+      const { ctx, page, errors } = await dsPage({ viewport, colorScheme }, DS_03);
+      await page.locator('#code').waitFor();
+      const rows = await dsRun(page, await dsLang(page, 3, 'js', 'wrong'));
+      assert.ok(rows.some(r => r.startsWith('✗')), where);
+      assert.equal(await overflow(page), false, where);
+      const out = await page.$$eval('#langBar button', bs => bs.filter(b => { const r = b.getBoundingClientRect(); return r.left < 0 || r.right > innerWidth; }).length);
+      assert.equal(out, 0, `${where}: the language buttons stay inside the viewport`);
+      assert.deepEqual(errors, [], where);
+      await ctx.close();
+    }
+  }
+});
+
+test('ds-quest practice page: the language buttons work by keyboard and Ctrl+Enter runs the tests', async () => {
+  const { ctx, page, errors } = await dsPage({}, DS_03);
+  await page.locator('#code').waitFor();
+  await page.focus('#langBar [data-lang="js"]');
+  await page.keyboard.press('Tab');
+  assert.equal(await page.evaluate(() => document.activeElement.dataset.lang), 'py');
+  await page.keyboard.press('Enter');
+  assert.equal(await page.getAttribute('#langBar [data-lang="py"]', 'aria-pressed'), 'true');
+  await page.fill('#code', await dsLang(page, 3, 'py', 'answer'));
+  await page.keyboard.press('Control+Enter');
+  await until(async () => (await dsRows(page)).length === 4);
+  assert.ok((await dsRows(page)).every(r => r.startsWith('✓')));
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest practice page: the file name and note follow each language', async () => {
+  const { ctx, page, errors } = await dsPage({}, DS_03);
+  await page.locator('#langBar button').first().waitFor();
+  await page.evaluate(() => { for (const l of ['cpp', 'rs']) DSQ.practice.RUNNERS[l].available = () => true; });
+  await page.click('.dots .dot[data-mi="0"]');
+  await page.click('.dots .dot[data-mi="3"]');
+  await page.locator('#langBar [data-lang="cpp"]:not(:disabled)').waitFor();
+  const seen = {};
+  for (const [lang, ext] of [['js', 'js'], ['py', 'py'], ['cpp', 'cpp'], ['rs', 'rs']]) {
+    await page.click(`#langBar [data-lang="${lang}"]`);
+    assert.equal(await page.textContent('#fileName'), `mission_1_4.${ext}`);
+    seen[lang] = await page.textContent('#edNote');
+  }
+  assert.equal(seen.js, 'Write your code here');
+  for (const l of ['py', 'cpp', 'rs']) assert.equal(seen[l], 'Checked by this quest\'s built-in interpreter', l);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+async function dsStubCpp(page, mode) {
+  await page.locator('#langBar button').first().waitFor();
+  await page.evaluate(m => {
+    window.__calls = [];
+    const R = DSQ.practice.RUNNERS.cpp;
+    R.available = () => true;
+    R.run = (src, b) => {
+      window.__calls.push(src);
+      if (m === 'throw') throw new Error('engine fell over');
+      return b.fn.tests.map(() => ({ ok: true, status: 'pass', msg: '' }));
+    };
+  }, mode);
+  await page.click('.dots .dot[data-mi="0"]');
+  await page.click('.dots .dot[data-mi="3"]');
+  await page.locator('#langBar [data-lang="cpp"]:not(:disabled)').waitFor();
+  await page.click('#langBar [data-lang="cpp"]');
+}
+const dsAfterFrame = page => page.evaluate(() => new Promise(r => requestAnimationFrame(() => setTimeout(r, 50))));
+
+test('ds-quest practice page: a C++ run shows Running…, keeps the icon, ignores a second run, and restores Run tests', async () => {
+  const { ctx, page, errors } = await dsPage({}, DS_03);
+  await page.locator('#code').waitFor();
+  await dsStubCpp(page, 'pass');
+  assert.equal(await page.textContent('#runLabel'), 'Run tests');
+  const during = await page.evaluate(() => {
+    const run = document.querySelector('#run');
+    run.click();
+    run.click();
+    document.querySelector('#code').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
+    return { label: document.querySelector('#runLabel').textContent, disabled: run.disabled, icon: !!run.querySelector('svg') };
+  });
+  assert.deepEqual(during, { label: 'Running…', disabled: true, icon: true });
+  await until(async () => (await dsRows(page)).length === 4);
+  await dsAfterFrame(page);
+  assert.ok((await dsRows(page)).every(r => r.startsWith('✓')));
+  assert.equal(await page.textContent('#runLabel'), 'Run tests');
+  assert.equal(await page.isDisabled('#run'), false);
+  assert.equal(await page.locator('#run svg').count(), 1);
+  assert.equal(await page.evaluate(() => window.__calls.length), 1, 'a second click and Ctrl+Enter during a run are ignored');
+  assert.ok(await page.locator('#console .msg.win').count() > 0, 'a passing run finishes the mission');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest practice page: a C++ runner that throws shows one error message with no rows and gives the button back', async () => {
+  const { ctx, page, errors } = await dsPage({}, DS_03);
+  await page.locator('#code').waitFor();
+  await dsStubCpp(page, 'throw');
+  await page.click('#run');
+  await page.locator('#console .msg.err').waitFor();
+  assert.equal(await page.locator('#console .msg.err').count(), 1);
+  assert.match(await page.textContent('#console .msg.err .h'), /engine fell over/);
+  assert.equal(await page.locator('#console .tests li').count(), 0);
+  assert.equal(await page.locator('#console .msg.win').count(), 0);
+  assert.equal(await page.textContent('#runLabel'), 'Run tests');
+  assert.equal(await page.isDisabled('#run'), false);
+  assert.equal((await dsSaved(page)).done?.['0.3'], undefined);
+  await page.evaluate(() => {
+    DSQ.practice.RUNNERS.cpp.run = (src, b) => b.fn.tests.map(() => ({ ok: true, status: 'pass', msg: '' }));
+  });
+  await page.click('#run');
+  await until(async () => (await dsRows(page)).length === 4);
+  assert.ok((await dsRows(page)).every(r => r.startsWith('✓')));
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest practice page: changing mission during a C++ run drops the stale result', async () => {
+  const { ctx, page, errors } = await dsPage({}, DS_03);
+  await page.locator('#code').waitFor();
+  await dsStubCpp(page, 'pass');
+  await page.evaluate(() => {
+    document.querySelector('#run').click();
+    document.querySelector('.dots .dot[data-mi="0"]').click();
+  });
+  await dsAfterFrame(page);
+  assert.equal(await page.evaluate(() => window.__calls.length), 0);
+  assert.equal(await page.locator('#console .tests').count(), 0);
+  assert.equal(await page.textContent('#runLabel'), 'Run');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest practice page: a Python function that calls itself forever gives error rows and the page stays usable', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ...DS_03, lang: 'py' });
+  await page.locator('#code').waitFor();
+  const rows = await dsRun(page, 'def sum(nums): return sum(nums)');
+  assert.equal(rows.length, 4);
+  assert.ok(rows.every(r => r.startsWith('✗')), rows.join('|'));
+  assert.match(await page.textContent('#console'), /RecursionError/);
+  assert.equal((await dsSaved(page)).done?.['0.3'], undefined);
+  await page.fill('#code', await dsLang(page, 3, 'py', 'answer'));
+  await page.click('#run');
+  await until(async () => (await dsSaved(page)).done?.['0.3'] === true);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('ds-quest practice page: missions without a practice block show no language picker and keep Run', async () => {
+  const { ctx, page, errors } = await dsPage({}, { ch: 0, mi: 0, done: DS_CH0_DONE, seen: { '0.3': true } });
+  await dsInjectOpen(page, { title: 'Plain', goal: 'Run it.', explain: 'Fixture.', starter: '// go\n', answer: '// go\n' });
+  await page.locator('#code').waitFor();
+  await until(async () => (await dsSaved(page)).mi === 5);
+  assert.ok(await page.locator('#langBar').isHidden());
+  assert.equal(await page.textContent('#runLabel'), 'Run');
   assert.deepEqual(errors, []);
   await ctx.close();
 });
