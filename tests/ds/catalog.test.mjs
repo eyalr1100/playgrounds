@@ -21,7 +21,7 @@ const ALLOWED = ['js', 'py', 'cpp', 'rs', 'ts', null];
 const EXPECTED = {
   'script-quest-v1': 'js', 'python-quest-v1': 'py', 'cpp-quest-v1': 'cpp', 'rust-quest-v1': 'rs',
   'typescript-quest-v1': null, 'shell-quest-v1': null, 'harbor-quest-v1': null, 'ds-quest-v1': null,
-  'net-quest-v1': null, 'agent-quest-v1': null, 'math-arithmetic-v1': null, 'math-algebra-v1': null,
+  'net-quest-v1': null, 'agent-quest-v1': null, 'postgis-quest-v1': null, 'math-arithmetic-v1': null, 'math-algebra-v1': null,
   'math-geometry-v1': null, 'math-trigonometry-v1': null,
 };
 const covered = (entry, registry, rows) =>
