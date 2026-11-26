@@ -8,6 +8,7 @@ import { loadNet } from '../net/harness.mjs';
 import { loadAgent } from '../agent/harness.mjs';
 import { loadRust } from '../rust/harness.mjs';
 import { loadMath } from '../math/harness.mjs';
+import { load as loadPostgis } from '../postgis/harness.mjs';
 import { loadHarborQuest, loadScriptContent, loadTypescriptContent } from '../content-loader.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -39,6 +40,7 @@ export const CHAPTERS = {
   'net-quest-v1': () => loadNet().CH,
   'agent-quest-v1': () => loadAgent().CH,
   'rust-quest-v1': () => loadRust().CH,
+  'postgis-quest-v1': () => loadPostgis().CH,
   'math-arithmetic-v1': math('arithmetic'),
   'math-algebra-v1': math('algebra'),
   'math-geometry-v1': math('geometry'),

@@ -13,7 +13,7 @@ import { chromium } from 'playwright';
 import { CHAPTERS } from './trophy/chapters.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const NAMES = ['script', 'typescript', 'python', 'cpp', 'shell', 'harbor', 'ds', 'net', 'agent', 'rust'];
+const NAMES = ['script', 'typescript', 'python', 'cpp', 'shell', 'harbor', 'ds', 'net', 'agent', 'rust', 'postgis'];
 const MIME = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json' };
 
 let server, base, browser, tmp;
@@ -103,8 +103,8 @@ test('landing page links to the Trophy Room, GitHub and the feature request form
   const hrefs = await page.$$eval('a.btn', a => a.map(x => x.getAttribute('href')));
   assert.deepEqual(hrefs, [
     'trophy-room/',
-    'https://github.com/shimoncohen/playgrounds',
-    'https://github.com/shimoncohen/playgrounds/issues/new?template=feature-request.yml',
+    'https://github.com/eyalr1100/playgrounds',
+    'https://github.com/eyalr1100/playgrounds/issues/new?template=feature-request.yml',
   ]);
   assert.deepEqual(errors, []);
   await ctx.close();
@@ -327,7 +327,7 @@ for (const pg of PAGES) {
     const { ctx, page, errors } = await open(`${base}/${pg}`);
     await page.waitForSelector('#mission');
     const idea = await page.getAttribute('footer.nv-foot a.nv-idea', 'href');
-    assert.equal(idea, 'https://github.com/shimoncohen/playgrounds/issues/new?template=feature-request.yml');
+    assert.equal(idea, 'https://github.com/eyalr1100/playgrounds/issues/new?template=feature-request.yml');
     await page.click('header.top a.nv-home');
     await page.waitForSelector('a.card');
     assert.equal(new URL(page.url()).pathname, '/');
@@ -6201,6 +6201,142 @@ test('script-quest: the curl check judges the code that ran, not the file as edi
   const base2 = await wins();
   await type('curl localhost:3000');
   try { await until(async () => (await wins()) > base2, 8000); } catch { assert.fail(`the check read the edited file. Terminal tail: ${(await screen()).slice(-400)}`); }
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+/* ---------- PostGIS Quest: SQL editor, result table, map, progress ---------- */
+async function pgPage(opts = {}, prep) {
+  const o = await open(`${base}/programming/postgis-quest/`, { viewport: { width: 1440, height: 900 }, ...opts }, prep);
+  o.console = [];
+  o.page.on('console', m => { if (m.type() === 'error') o.console.push(m.text()); });
+  await o.page.waitForSelector('#sql');
+  o.run = async sql => { await o.page.fill('#sql', sql); await o.page.click('#run'); };
+  o.xp = async () => (await o.page.textContent('#xpText')).trim();
+  return o;
+}
+const pgSeed = v => c => c.addInitScript(x => { if (!sessionStorage.seeded) { localStorage.setItem('postgis-quest-v1', x); sessionStorage.seeded = 1; } }, v);
+
+test('postgis-quest: a query fills the table and draws its shapes, and a row lights up its shape', async () => {
+  const { ctx, page, errors, run } = await pgPage();
+  await run('SELECT name, geom FROM wells WHERE depth_m > 10;');
+  assert.equal(await page.$$eval('#out tbody tr', r => r.length), 4);
+  assert.match(await page.textContent('#out tbody'), /0101000020E6100000/);
+  assert.equal(await page.$$eval('#map .hit-g', g => g.length), 4);
+  await page.hover('#out tbody tr[data-row="1"]');
+  assert.equal(await page.$$eval('#map .hit-g[data-row="1"] .hit.hot', g => g.length), 1);
+  assert.match(await page.textContent('#mapItems'), /POINT\(/);
+  await run('SELECT name FROM wells WHERE depth_m > 10;');
+  assert.equal(await page.$$eval('#map .hit-g', g => g.length), 4, 'names light up their wells');
+  await run('SELECT id, ST_ClusterDBSCAN(geom, eps := 0.01, minpoints := 3) OVER () AS cid FROM stones;');
+  assert.equal(await page.$$eval('#map .hit.cl', g => g.length), 18);
+  assert.equal(await page.$$eval('#map .hit.noise', g => g.length), 2);
+  assert.match(await page.textContent('#legend'), /NULL \(noise\)/);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test("postgis-quest: an error shows PostgreSQL's message with a caret, and completes nothing", async () => {
+  const { ctx, page, errors, run, xp } = await pgPage();
+  await run('SELECT * FORM places;');
+  const t = await page.textContent('#out .perr');
+  assert.match(t, /ERROR: {2}syntax error at or near "FORM"/);
+  assert.match(t, /LINE 1: SELECT \* FORM places;\n\s+\^/);
+  assert.match(await page.textContent('#feedback'), /stopped with an error/);
+  assert.equal(await xp(), '0 XP');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('postgis-quest: finishing a mission awards XP once, and the query is kept', async () => {
+  const { ctx, page, errors, run, xp } = await pgPage();
+  await run('SELECT * FROM places;');
+  assert.equal(await xp(), '10 XP');
+  assert.equal(await page.$$eval('#feedback .win', e => e.length), 1);
+  await run('SELECT * FROM places;');
+  assert.equal(await xp(), '10 XP');
+  await page.click('#mission .dot[data-mi="1"]');
+  await run('SELECT * FROM places;');
+  assert.equal(await xp(), '10 XP', "the last mission's answer does not pass the next");
+  await page.click('#mission .dot[data-mi="0"]');
+  assert.equal(await page.inputValue('#sql'), 'SELECT * FROM places;');
+  await page.waitForTimeout(400);
+  await page.reload();
+  await page.waitForSelector('#sql');
+  assert.equal(await xp(), '10 XP');
+  assert.equal(await page.inputValue('#sql'), 'SELECT * FROM places;');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('postgis-quest: a point far off the island widens the map and says so', async () => {
+  const { ctx, page, errors, run } = await pgPage();
+  await run('SELECT ST_SetSRID(ST_MakePoint(35.05, -39.97), 4326);');
+  assert.match(await page.textContent('#mapNote'), /far off the island/);
+  assert.equal(await page.$$eval('#map .hit-g', g => g.length), 1);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('postgis-quest: query text and results reach the page as text, never markup', async () => {
+  const { ctx, page, errors, run } = await pgPage();
+  await run("SELECT '<img src=x onerror=window.pwned=1>' AS name;");
+  assert.equal(await page.$$eval('#out img, #map img, #hl img', e => e.length), 0);
+  assert.match(await page.textContent('#out tbody'), /<img src=x/);
+  assert.equal(await page.evaluate(() => window.pwned), undefined);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('postgis-quest: a damaged save loads without errors', async () => {
+  for (const [raw, want] of [['{"done":5,"xp":"x"}', '0 XP'], ['not json', '0 XP'], ['[1,2]', '0 XP'],
+    ['{"done":{"9.9":true,"0.0":true},"xp":-5,"ch":99,"mi":-1,"tab":"nope","codes":7,"best":"x"}', '10 XP']]) {
+    const o = await pgPage({}, pgSeed(raw));
+    assert.equal(await o.xp(), want, raw);
+    assert.ok((await o.page.textContent('#mission h2')).trim().length > 3, raw);
+    await o.run('SELECT 1;');
+    assert.deepEqual(o.errors, [], raw);
+    assert.deepEqual(o.console, [], raw);
+    await o.ctx.close();
+  }
+});
+
+test('postgis-quest: opening the page does not write a save', async () => {
+  const { ctx, page, errors } = await pgPage();
+  await page.waitForTimeout(400);
+  assert.equal(await read(page, 'postgis-quest-v1'), null);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('postgis-quest: layout at 390px', async () => {
+  for (const width of [390, 360]) {
+    const { ctx, page, errors, run } = await pgPage({ viewport: { width, height: 800 } });
+    await run('SELECT name, geom FROM places;');
+    assert.equal(await overflow(page), false, `${width}: SQL view`);
+    assert.ok(parseFloat(await page.$eval('#sql', e => getComputedStyle(e).fontSize)) >= 16);
+    assert.equal(await page.isVisible('.mapCol'), false);
+    await page.click('#mission [data-act="tosql"]');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'sql', 'Open the editor focuses it');
+    await page.click('.seg button[data-view="map"]');
+    assert.equal(await page.isVisible('#map svg'), true);
+    assert.equal(await page.isVisible('#sqlPanel'), false);
+    assert.equal(await overflow(page), false, `${width}: map view`);
+    assert.deepEqual(errors, []);
+    await ctx.close();
+  }
+});
+
+test('postgis-quest: quick-fire opens per chapter, and a field guide example goes into the editor', async () => {
+  const done = JSON.stringify({ done: Object.fromEntries([0, 1, 2, 3, 4, 5].map(i => ['0.' + i, true])), xp: 60 });
+  const { ctx, page, errors } = await pgPage({}, pgSeed(done));
+  await page.click('.tabs button[data-tab="fire"]');
+  await page.click('#fStart');
+  assert.equal(await page.$$eval('#fStage .opt', o => o.length), 4);
+  await page.click('.tabs button[data-tab="guide"]');
+  await page.locator('#guide .excmd').first().click();
+  assert.equal(await page.isVisible('#tab-quest'), true);
+  assert.equal(await page.inputValue('#sql'), 'SELECT * FROM places;');
   assert.deepEqual(errors, []);
   await ctx.close();
 });

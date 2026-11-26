@@ -4,7 +4,7 @@
 
 Each playground is a guided *quest*: a story-flavoured path of bite-sized missions, a live console that runs your code for real, quick-fire rounds to keep you sharp, and a field guide for when you get stuck. You earn XP, collect chapter badges and climb a rank ladder from *Rookie* to *Wizard*.
 
-👉 **[Play it now: shimoncohen.github.io/playgrounds](https://shimoncohen.github.io/playgrounds/)**
+👉 **[Play it now: eyalr1100.github.io/playgrounds](https://eyalr1100.github.io/playgrounds/)**
 
 | | Playground | You will learn | Folder |
 |---|---|---|---|
@@ -18,6 +18,7 @@ Each playground is a guided *quest*: a story-flavoured path of bite-sized missio
 | ⇄ | **Network Quest** | Packets, ARP, IP addressing, routing, NAT and DNS on a pretend network you can poke at, with every packet readable right down to the bytes | [`programming/net-quest/`](programming/net-quest/) |
 | ⌘ | **Agent Quest** | How an AI coding agent works: the read, act, check loop and the context window, then writing prompts and setups for a pretend agent whose runs are graded exactly | [`programming/agent-quest/`](programming/agent-quest/) |
 | 🦀 | **Rust Quest** | Rust from `println!` and `let` onwards, run by a small Rust checker whose error codes are checked against a real `rustc` for the programs the quest supports; anything else is reported as unsupported | [`programming/rust-quest/`](programming/rust-quest/) |
+| 🗺 | **PostGIS Quest** | Spatial SQL with PostGIS on a made-up island in SRID 4326: points, lines and polygons, `ST_Contains` and the other predicates, distances in degrees and metres, spatial joins and clustering with `ST_ClusterKMeans` and `ST_ClusterDBSCAN`, every result drawn on a map | [`programming/postgis-quest/`](programming/postgis-quest/) |
 | ∑ | **Math** | Arithmetic, algebra, geometry and trigonometry, with prerequisite hints between chapters | [`math/`](math/) |
 
 **Trophy Room** ([`trophy-room/`](trophy-room/)) shows your playground level, worked out from the XP of every playground, your progress per subject and playground, and achievements such as Playground Master. It reads the progress already saved in your browser.
@@ -50,13 +51,13 @@ Type `help` in the shell for every command by tier. The practice shell is a docu
 
 These make good, low-stakes onboarding material: new hires learn by doing, at their own pace, with nothing to install.
 
-- **Share a link.** Every playground has a stable URL. Send `https://shimoncohen.github.io/playgrounds/programming/shell-quest/` and a new colleague is typing commands in seconds.
+- **Share a link.** Every playground has a stable URL. Send `https://eyalr1100.github.io/playgrounds/programming/shell-quest/` and a new colleague is typing commands in seconds.
 - **Pick a path.** Backend newcomers: Shell Quest, then Harbor Quest. Frontend newcomers: Script Quest. Data folks: Python Quest. Systems folks: C++ Quest or Rust Quest.
 - **Set a rank as the goal.** "Reach *Pipe Fitter* in your first week" is a friendly, measurable milestone. Progress exports to a small JSON file, so people can show where they are.
 - **Pair on it.** The missions read well out loud. Take turns driving.
 - **Challenge a friend.** Quick-fire rounds are made for "beat my score".
 
-Want a quest on *your* stack, tools or internal conventions? [Open an issue](https://github.com/shimoncohen/playgrounds/issues/new/choose) or build it (below).
+Want a quest on *your* stack, tools or internal conventions? [Open an issue](https://github.com/eyalr1100/playgrounds/issues/new/choose) or build it (below).
 
 ## 🤝 Contribute (humans and agents welcome)
 
@@ -123,6 +124,7 @@ programming/            the Programming section: index.html (hub with a card per
   net-quest/            like those, plus engine/ (DOM-free simulator, shell, commands), content/ (mission model, seven chapters, ranks, quick-fire, guide), ui.js + inspector.js
   agent-quest/          like those, plus engine/ (DOM-free agent simulator: files, prompt grammar, context, policy), content/ (mission model, chapters 1 to 23, ranks, quick-fire, guide), ui.js + editor.js + meter.js
   rust-quest/           like those, plus engine/ (DOM-free lexer, parser, checker, interpreter), content/ (mission model, chapters, ranks, quick-fire, guide, the rustc verification record), ui.js + editor.js + memview.js
+  postgis-quest/        like those, plus engine/ (DOM-free SQL parser, geometry, predicates, clustering, executor), content/ (the island's tables, mission model, seven chapters, ranks, quick-fire, guide), ui.js (editor, result table, map)
   shell-quest/          split by job (below)
 math/                   the hub: index.html + style.css + app.js (map and progress rings), graph.js (DOM-free prerequisite graph)
 math/scene/             the scene layer: model.js (DOM-free), view.js, svg2d.js, three3d.js, palette.js, scene.css; the test page is tests/math/pages/scenes.html
@@ -132,7 +134,7 @@ math/arithmetic/ math/algebra/ math/geometry/ math/trigonometry/
                         a track each: index.html + content.js (DOM-free chapters, quick-fire, guide) + app.js
 math/vendor/            committed third-party scripts for Math (KaTeX, math.js, MathLive, three.js), made only by tools/vendor-math.sh
 trophy-room/            the Trophy Room: index.html + style.css + app.js, rendered from shared/trophies.js
-tests/                  engine tests (Node; shell/, ds/, net/, math/, agent/, rust/ and trophy/), browser smoke + golden tests (Playwright), math scene and working-area browser tests
+tests/                  engine tests (Node; shell/, ds/, net/, math/, agent/, rust/, postgis/ and trophy/), browser smoke + golden tests (Playwright), math scene and working-area browser tests
 tools/                  build.py (artifact bundler), publish_site.sh (gh-pages), vendor-math.sh (rebuilds math/vendor/)
 docs/                   guidelines, design specs, implementation plans
 .github/                CI, Pages deploy, PR previews, issue and PR templates

@@ -16,6 +16,7 @@
     { key: 'net-quest-v1', lang: null, name: 'Network Quest', subject: 'programming', href: 'programming/net-quest/', sep: '.', missions: [8, 5, 6, 6, 7, 9, 9] },
     { key: 'agent-quest-v1', lang: null, name: 'Agent Quest', subject: 'programming', href: 'programming/agent-quest/', sep: '.', missions: [5, 5, 4, 5, 5, 4, 5, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3] },
     { key: 'rust-quest-v1', lang: 'rs', name: 'Rust Quest', subject: 'programming', href: 'programming/rust-quest/', sep: '.', missions: [6, 8, 8, 6, 9, 7, 12, 9, 9, 9, 9, 9, 8] },
+    { key: 'postgis-quest-v1', lang: null, name: 'PostGIS Quest', subject: 'programming', href: 'programming/postgis-quest/', sep: '.', missions: [6, 6, 7, 7, 6, 6, 6] },
     { key: 'math-arithmetic-v1', lang: null, name: 'Arithmetic', subject: 'math', href: 'math/arithmetic/', sep: '.', missions: [5, 5, 5, 5, 5] },
     { key: 'math-algebra-v1', lang: null, name: 'Algebra', subject: 'math', href: 'math/algebra/', sep: '.', missions: [5, 5, 5, 5, 5] },
     { key: 'math-geometry-v1', lang: null, name: 'Geometry', subject: 'math', href: 'math/geometry/', sep: '.', missions: [5, 5, 5, 5] },

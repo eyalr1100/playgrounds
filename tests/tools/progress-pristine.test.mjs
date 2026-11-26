@@ -50,6 +50,7 @@ describe('per-playground rule from each page config', () => {
     ['programming/cpp-quest', { codes: {}, sandbox: null, inSandbox: false }, [{ sandbox: 'int x;' }]],
     ['programming/net-quest', { answers: {} }, [{ answers: { '0.0': 'tcp' } }]],
     ['programming/rust-quest', { codes: {} }, [{ codes: { '0.0': 'fn' } }]],
+    ['programming/postgis-quest', { codes: {}, tab: 'quest' }, [{ codes: { '0.0': 'SELECT * FROM places;' } }]],
     ['programming/agent-quest', { badges: {} }, []],
     ['math/algebra', { notes: {}, work: {} }, [{ notes: { 0: 'hi' } }, { work: { '0.0': ['x = 2'] } }]],
   ];
