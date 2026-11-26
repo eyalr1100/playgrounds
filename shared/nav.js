@@ -5,7 +5,7 @@
   'use strict';
   const host = document.querySelector('header.top');
   if (!host) return;
-  const REPO = 'https://github.com/shimoncohen/playgrounds';
+  const REPO = 'https://github.com/eyalr1100/playgrounds';
 
   const link = (cls, href, ...kids) => {
     const a = document.createElement('a');

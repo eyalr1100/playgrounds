@@ -103,8 +103,8 @@ test('landing page links to the Trophy Room, GitHub and the feature request form
   const hrefs = await page.$$eval('a.btn', a => a.map(x => x.getAttribute('href')));
   assert.deepEqual(hrefs, [
     'trophy-room/',
-    'https://github.com/shimoncohen/playgrounds',
-    'https://github.com/shimoncohen/playgrounds/issues/new?template=feature-request.yml',
+    'https://github.com/eyalr1100/playgrounds',
+    'https://github.com/eyalr1100/playgrounds/issues/new?template=feature-request.yml',
   ]);
   assert.deepEqual(errors, []);
   await ctx.close();
@@ -327,7 +327,7 @@ for (const pg of PAGES) {
     const { ctx, page, errors } = await open(`${base}/${pg}`);
     await page.waitForSelector('#mission');
     const idea = await page.getAttribute('footer.nv-foot a.nv-idea', 'href');
-    assert.equal(idea, 'https://github.com/shimoncohen/playgrounds/issues/new?template=feature-request.yml');
+    assert.equal(idea, 'https://github.com/eyalr1100/playgrounds/issues/new?template=feature-request.yml');
     await page.click('header.top a.nv-home');
     await page.waitForSelector('a.card');
     assert.equal(new URL(page.url()).pathname, '/');

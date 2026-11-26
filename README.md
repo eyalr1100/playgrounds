@@ -4,7 +4,7 @@
 
 Each playground is a guided *quest*: a story-flavoured path of bite-sized missions, a live console that runs your code for real, quick-fire rounds to keep you sharp, and a field guide for when you get stuck. You earn XP, collect chapter badges and climb a rank ladder from *Rookie* to *Wizard*.
 
-👉 **[Play it now: shimoncohen.github.io/playgrounds](https://shimoncohen.github.io/playgrounds/)**
+👉 **[Play it now: eyalr1100.github.io/playgrounds](https://eyalr1100.github.io/playgrounds/)**
 
 | | Playground | You will learn | Folder |
 |---|---|---|---|
@@ -51,13 +51,13 @@ Type `help` in the shell for every command by tier. The practice shell is a docu
 
 These make good, low-stakes onboarding material: new hires learn by doing, at their own pace, with nothing to install.
 
-- **Share a link.** Every playground has a stable URL. Send `https://shimoncohen.github.io/playgrounds/programming/shell-quest/` and a new colleague is typing commands in seconds.
+- **Share a link.** Every playground has a stable URL. Send `https://eyalr1100.github.io/playgrounds/programming/shell-quest/` and a new colleague is typing commands in seconds.
 - **Pick a path.** Backend newcomers: Shell Quest, then Harbor Quest. Frontend newcomers: Script Quest. Data folks: Python Quest. Systems folks: C++ Quest or Rust Quest.
 - **Set a rank as the goal.** "Reach *Pipe Fitter* in your first week" is a friendly, measurable milestone. Progress exports to a small JSON file, so people can show where they are.
 - **Pair on it.** The missions read well out loud. Take turns driving.
 - **Challenge a friend.** Quick-fire rounds are made for "beat my score".
 
-Want a quest on *your* stack, tools or internal conventions? [Open an issue](https://github.com/shimoncohen/playgrounds/issues/new/choose) or build it (below).
+Want a quest on *your* stack, tools or internal conventions? [Open an issue](https://github.com/eyalr1100/playgrounds/issues/new/choose) or build it (below).
 
 ## 🤝 Contribute (humans and agents welcome)
 
